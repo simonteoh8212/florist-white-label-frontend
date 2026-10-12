@@ -2,71 +2,97 @@
   {
     "id": "autarix-01",
     "name": "Classic Birthday Floral Bouquet",
+    "nameZh": "经典生日鲜花花束",
     "price": 168,
     "description": "Vibrant celebratory bouquet crafted with premium fresh blooms, delicate fillers, and festive wrapping.",
+    "descriptionZh": "精选优质新鲜花材搭配优雅点缀与定制包装，为寿星献上最诚挚温馨的生日祝福。",
     "image": "/stores/autarix/birthday_bouquet.webp",
     "category": "Birthday",
-    "tag": "Best Seller"
+    "tag": "Best Seller",
+    "tagZh": "畅销热卖"
   },
   {
     "id": "autarix-02",
     "name": "Chinese Valentine's (七夕) Bouquet",
+    "nameZh": "浪漫七夕情人节花束",
     "price": 198,
     "description": "Romantic crimson and soft blush roses arranged with delicate baby's breath and silk ribbon.",
+    "descriptionZh": "浓情深红玫瑰与温柔浅粉玫瑰交织，缀以满天星与奢华丝带，倾诉挚爱深情。",
     "image": "/stores/autarix/chinese_valentines.webp",
     "category": "Romance",
-    "tag": "Signature"
+    "tag": "Signature",
+    "tagZh": "招牌甄选"
   },
   {
     "id": "autarix-03",
     "name": "Graduation Celebration Bouquet",
+    "nameZh": "璀璨前程毕业向日葵花束",
     "price": 158,
     "description": "Bright sunny blooms and premium sunflowers styled for joyous convocation and graduation ceremonies.",
+    "descriptionZh": "明媚向日葵搭配鲜艳花卉，寓意前程似锦，定格毕业典礼的喜悦与荣光。",
     "image": "/stores/autarix/graduation_bouquet.webp",
     "category": "Graduation",
-    "tag": "Popular"
+    "tag": "Popular",
+    "tagZh": "人气推荐"
   },
   {
     "id": "autarix-04",
     "name": "Ocean Breeze Blue Floral Arrangement",
+    "nameZh": "海风物语梦幻蓝调花礼",
     "price": 178,
     "description": "Enchanting powder blue hydrangeas and pastel accents paired with silver dollar eucalyptus.",
+    "descriptionZh": "纯净粉蓝绣球花与淡雅色系花材相映成趣，融入尤加利叶，散发静谧治愈之美。",
     "image": "/stores/autarix/blue_flowers.webp",
     "category": "Bouquets",
-    "tag": "Special"
+    "tag": "Special",
+    "tagZh": "特别定制"
   },
   {
     "id": "autarix-05",
     "name": "Sunny Delight Yellow Flower Bouquet",
+    "nameZh": "向阳欢歌黄色花束",
     "price": 148,
     "description": "Uplifting golden sunflowers, chamomile daisies, and fresh garden greenery in artisanal parchment.",
+    "descriptionZh": "灿烂向日葵与清新洋甘菊组合，采用手作环保包装，传递满满正能量与阳光。",
     "image": "/stores/autarix/yellow_flowers.webp",
     "category": "Bouquets",
-    "tag": "Classic"
+    "tag": "Classic",
+    "tagZh": "经典系列"
   },
   {
     "id": "autarix-06",
     "name": "Personalized Balloon & Photo Flower Box",
+    "nameZh": "定制气球与拍立得照片花盒",
     "price": 218,
     "description": "Customized bubble balloon with polaroid photo prints nestled atop fresh premium flower box.",
+    "descriptionZh": "定制波波球气球，附带精选拍立得照片珍藏，坐落于新鲜鲜花礼盒之上，仪式感十足。",
     "image": "/stores/autarix/balloon_and_photos_flowers.webp",
     "category": "Special Gift",
-    "tag": "Customized"
+    "tag": "Customized",
+    "tagZh": "专属定制"
   },
   {
     "id": "autarix-07",
     "name": "Get Well Soon Fruit & Flower Basket",
+    "nameZh": "早日康复鲜花水果慰问篮",
     "price": 188,
     "description": "Nourishing fresh fruits accompanied by cheerful garden blooms and a supportive greeting card.",
+    "descriptionZh": "营养丰富的新鲜时令水果，搭配生机盎然的温馨花卉与心意卡，传递暖心关怀。",
     "image": "/stores/autarix/hospital_visit_flowers_and_fruits.webp",
-    "category": "Wellness"
+    "category": "Wellness",
+    "tag": "Care",
+    "tagZh": "康复关怀"
   },
   {
     "id": "autarix-08",
     "name": "Peaceful Farewell Condolence Flowers",
+    "nameZh": "安息悼念白事追思花束",
     "price": 220,
     "description": "Graceful white lilies, chrysanthemums, and serene greens crafted into an elegant floral tribute.",
+    "descriptionZh": "高雅白百合、清雅菊花与庄重绿叶静心打造，寄托崇高敬意与深切哀思。",
     "image": "/stores/autarix/condolence_flowers.webp",
-    "category": "Condolence"
+    "category": "Condolence",
+    "tag": "Respect",
+    "tagZh": "肃穆追思"
   }
 ]

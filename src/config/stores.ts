@@ -6,6 +6,12 @@ export interface Product {
   image: string;
   category: string;
   tag?: string;
+
+  // Optional Chinese localization
+  nameZh?: string;
+  descriptionZh?: string;
+  categoryZh?: string;
+  tagZh?: string;
 }
 
 export type PaymentMode = "static_qr" | "gateway";
@@ -54,6 +60,11 @@ export interface StoreConfig {
   // Delivery Time Configuration (Time range slots vs Exact time)
   deliveryTimeConfig?: DeliveryTimeConfig;
 
+  // Multi-language localization configuration (per-tenant switch)
+  enableLanguageSelector?: boolean; // Defaults to true; set false to hide switcher
+  defaultLocale?: "en" | "zh"; // Default starting locale
+  supportedLocales?: ("en" | "zh")[]; // Available locales for this store
+
   products: Product[];
 }
 
@@ -64,8 +75,8 @@ import greenlandProducts from "./tenants/greenland/products.json";
 export const STORES: Record<string, StoreConfig> = {
   autarix: {
     id: "store_autarix",
-    name: "Autarix Floral & Gift",
-    companyName: "Autarix Floral & Gift",
+    name: "Autarix Florist & Gift",
+    companyName: "Autarix Florist & Gift",
     ssmNumber: "PG0523418-V",
     slug: "autarix",
     whatsapp: "+6012-542 0555",
@@ -76,7 +87,7 @@ export const STORES: Record<string, StoreConfig> = {
     pickupAddress: "1-G-6, Medan Angsana 4, Farlim Business Centre, 11500 Ayer Itam, Pulau Pinang",
     googleMapsUrl: "https://maps.app.goo.gl/LqXTrwJFXAhr1rtA7",
     tngQrUrl: "/stores/autarix/tng-qr.svg",
-    tngAccountName: "Autarix Floral & Gift (TNG eWallet)",
+    tngAccountName: "Autarix Florist & Gift (TNG eWallet)",
     tngDeepLink: "tngewallet://",
     paymentMode: "static_qr",
     gatewayCheckoutUrl: "https://checkout.hitpayapp.com/pay/autarix-demo",
@@ -87,6 +98,11 @@ export const STORES: Record<string, StoreConfig> = {
       type: "range",
       slots: generateHourlySlots(10, 20),
     },
+
+    // Multi-language localization configuration
+    enableLanguageSelector: false,
+    defaultLocale: "en",
+    supportedLocales: ["en", "zh"],
 
     // Products loaded from src/config/tenants/autarix/products.json
     products: autarixProducts as Product[],
@@ -121,6 +137,11 @@ export const STORES: Record<string, StoreConfig> = {
       sameDayLeadHours: 2,
     },
 
+    // Multi-language localization configuration
+    enableLanguageSelector: true,
+    defaultLocale: "en",
+    supportedLocales: ["en", "zh"],
+
     // Products loaded from src/config/tenants/greenland/products.json
     products: greenlandProducts as Product[],
   },
@@ -138,6 +159,34 @@ export function getStoreBySlug(slug: string): StoreConfig | undefined {
  */
 export function getAllStoreSlugs(): string[] {
   return Object.keys(STORES);
+}
+
+/**
+ * Returns localized product name, description, category, and tag based on active locale.
+ */
+export function getProductLocalized(
+  product: Product,
+  locale: "en" | "zh" = "en"
+): {
+  name: string;
+  description: string;
+  category: string;
+  tag?: string;
+} {
+  if (locale === "zh") {
+    return {
+      name: product.nameZh || product.name,
+      description: product.descriptionZh || product.description,
+      category: product.categoryZh || product.category,
+      tag: product.tagZh || product.tag,
+    };
+  }
+  return {
+    name: product.name,
+    description: product.description,
+    category: product.category,
+    tag: product.tag,
+  };
 }
 
 /**

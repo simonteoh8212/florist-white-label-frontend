@@ -29,7 +29,7 @@ export default function RootPlatformPage() {
   const cleanContactNumber = contactWhatsappDigits.startsWith("0")
     ? `6${contactWhatsappDigits}`
     : contactWhatsappDigits;
-  const inquiryUrl = `https://wa.me/${cleanContactNumber}?text=${encodeURIComponent(
+  const inquiryUrl = `https://api.whatsapp.com/send?phone=${cleanContactNumber}&text=${encodeURIComponent(
     "Hello FlowerApp.my team! I am interested in setting up a branded storefront for my florist atelier."
   )}`;
 

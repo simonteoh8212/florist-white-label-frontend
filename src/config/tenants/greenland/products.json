@@ -2,37 +2,49 @@
   {
     "id": "greenland-01",
     "name": "Cascading Phalaenopsis White Orchid",
+    "nameZh": "垂瀑白蝴蝶兰手作盆栽",
     "price": 228,
     "description": "Double-stem cascading white Phalaenopsis orchids in handcrafted artisanal ceramic planter with live moss.",
+    "descriptionZh": "双株优雅垂瀑白色蝴蝶兰，栽植于手作质感陶瓷花器中，铺垫鲜活苔藓，彰显雅致生活品味。",
     "image": "https://images.unsplash.com/photo-1525310072745-f49212b5ac6d?auto=format&fit=crop&w=800&q=80",
     "category": "Potted",
-    "tag": "Living Luxury"
+    "tag": "Living Luxury",
+    "tagZh": "生机奢华"
   },
   {
     "id": "greenland-02",
     "name": "Wild Botanical Meadow Bouquet",
+    "nameZh": "野趣原野植物花束",
     "price": 148,
     "description": "Vibrant golden sunflowers paired with chamomile daisies, thistle, and fresh silver dollar eucalyptus.",
+    "descriptionZh": "灿烂向日葵、小洋甘菊、蓟花与银元尤加利叶交织，呈现自然野性花艺之美。",
     "image": "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?auto=format&fit=crop&w=800&q=80",
     "category": "Botanicals",
-    "tag": "Eco Friendly"
+    "tag": "Eco Friendly",
+    "tagZh": "环保理念"
   },
   {
     "id": "greenland-03",
     "name": "Monstera Deliciosa Living Planter",
+    "nameZh": "龟背竹室内绿植盆栽",
     "price": 120,
     "description": "Tropical split-leaf monstera planted in a minimalist textured terrazzo ceramic with drainage saucer.",
+    "descriptionZh": "热带大开背龟背竹，搭配简约水磨石质感陶瓷盆与接水盘，净化空气美化居家空间。",
     "image": "https://images.unsplash.com/photo-1614594975525-e45190c55d0b?auto=format&fit=crop&w=800&q=80",
     "category": "Living Plants",
-    "tag": "Air Purifying"
+    "tag": "Air Purifying",
+    "tagZh": "净化空气"
   },
   {
     "id": "greenland-04",
     "name": "Olive Branch & Casablanca Lily Vase",
+    "nameZh": "橄榄枝与香水百合花瓶",
     "price": 175,
     "description": "Fragrant Casablanca lilies arranged with Tuscan olive branches and eucalyptus in a frosted glass cylinder vase.",
+    "descriptionZh": "芬芳卡萨布兰卡百合搭配托斯卡纳橄榄枝及尤加利叶，置于磨砂圆柱玻璃花瓶中。",
     "image": "https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=800&q=80",
     "category": "Vase Arrangements",
-    "tag": "Signature"
+    "tag": "Signature",
+    "tagZh": "招牌设计"
   }
 ]

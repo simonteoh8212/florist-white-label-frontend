@@ -9,7 +9,12 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import { StoreConfig, STORES, DeliveryTimeSlot } from "@/config/stores";
+import {
+  StoreConfig,
+  STORES,
+  DeliveryTimeSlot,
+  getProductLocalized,
+} from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
 import { TngPaymentView } from "@/components/TngPaymentView";
 import {
@@ -30,6 +35,8 @@ import {
 } from "lucide-react";
 import { ProductImageModal } from "@/components/ProductImageModal";
 import { StorePolicyModal } from "@/components/StorePolicyModal";
+import { useTranslation } from "@/i18n/localeStore";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 interface CheckoutDrawerProps {
   store?: StoreConfig;
@@ -38,6 +45,7 @@ interface CheckoutDrawerProps {
 export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp }) => {
   const currentStore = useCartStore((state) => state.currentStore);
   const store = storeProp || currentStore || STORES.autarix;
+  const { t, locale } = useTranslation();
 
   const isCheckoutDrawerOpen = useCartStore(
     (state) => state.isCheckoutDrawerOpen
@@ -49,6 +57,9 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
   const setCheckoutStep = useCartStore((state) => state.setCheckoutStep);
 
   const selectedProduct = useCartStore((state) => state.selectedProduct);
+  const selectedLocalized = selectedProduct
+    ? getProductLocalized(selectedProduct, locale)
+    : null;
   const fulfillmentMethod = useCartStore((state) => state.fulfillmentMethod);
   const setFulfillmentMethod = useCartStore(
     (state) => state.setFulfillmentMethod
@@ -248,42 +259,48 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
     setValidationError(null);
 
     if (!customerDetails.name.trim()) {
-      setValidationError("Please enter your name.");
+      setValidationError(t("validationName"));
       return;
     }
     if (!customerDetails.phone.trim()) {
-      setValidationError("Please enter your WhatsApp contact number.");
+      setValidationError(t("validationPhone"));
       return;
     }
     if (!selectedDate) {
-      setValidationError("Please pick a fulfillment date.");
+      setValidationError(t("validationDate"));
       return;
     }
     if (isExactTimeMode) {
       if (!exactTimeInput) {
-        setValidationError("Please specify your preferred exact delivery time.");
+        setValidationError(t("validationExactTime"));
         return;
       }
       if (isToday && exactTimeInput < minTimeForExactInput) {
         setValidationError(
-          `Same-day orders require at least ${leadHours}h advance notice (from ${formatTime12h(minTimeForExactInput)} onwards).`
+          t("validationExactTimeAdvance", {
+            hours: leadHours,
+            time: formatTime12h(minTimeForExactInput),
+          })
         );
         return;
       }
       if (exactTimeInput < operatingStart || exactTimeInput > operatingEnd) {
         setValidationError(
-          `Please choose a delivery time within operating hours (${formatTime12h(operatingStart)} – ${formatTime12h(operatingEnd)}).`
+          t("validationExactTimeHours", {
+            start: formatTime12h(operatingStart),
+            end: formatTime12h(operatingEnd),
+          })
         );
         return;
       }
     } else {
       if (!selectedTime) {
-        setValidationError("Please choose a preferred delivery time slot.");
+        setValidationError(t("validationTimeSlot"));
         return;
       }
     }
     if (fulfillmentMethod === "delivery" && !customerDetails.deliveryAddress.trim()) {
-      setValidationError("Please enter your complete delivery address.");
+      setValidationError(t("validationAddress"));
       return;
     }
 
@@ -308,23 +325,26 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
               </span>
               <DrawerTitle className="text-base font-semibold text-stone-900 tracking-tight">
                 {checkoutStep === 1
-                  ? "Fulfillment & Details"
-                  : "Touch 'n Go Payment"}
+                  ? t("fulfillmentAndDetails")
+                  : t("touchNGoPayment")}
               </DrawerTitle>
             </div>
-            <button
-              type="button"
-              onClick={() => setCheckoutDrawerOpen(false)}
-              className="rounded-full p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer"
-              aria-label="Close drawer"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              {store.enableLanguageSelector !== false && <LanguageSelector />}
+              <button
+                type="button"
+                onClick={() => setCheckoutDrawerOpen(false)}
+                className="rounded-full p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer"
+                aria-label={t("closeDrawer")}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <DrawerDescription className="text-[12px] text-stone-500 mt-0.5">
             {checkoutStep === 1
-              ? `Order for ${store.name} • Select delivery or pickup`
-              : "Scan the TNG QR code and confirm via WhatsApp."}
+              ? t("drawerOrderFor", { store: store.name })
+              : t("drawerTngSubtitle")}
           </DrawerDescription>
         </DrawerHeader>
 
@@ -338,12 +358,12 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                   <button
                     type="button"
                     onClick={() => setShowProductImageModal(true)}
-                    aria-label={`View full picture of ${selectedProduct.name}`}
+                    aria-label={`View full picture of ${selectedLocalized?.name || selectedProduct.name}`}
                     className="group/thumb relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-stone-100 border border-stone-200/60 cursor-pointer focus:outline-none"
                   >
                     <Image
                       src={selectedProduct.image}
-                      alt={selectedProduct.name}
+                      alt={selectedLocalized?.name || selectedProduct.name}
                       fill
                       sizes="64px"
                       className="object-cover transition-transform duration-300 group-hover/thumb:scale-110"
@@ -354,10 +374,10 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                   </button>
                   <div className="flex-1 min-w-0">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
-                      Selected Arrangement
+                      {t("selectedArrangement")}
                     </span>
                     <h4 className="truncate text-sm font-semibold text-stone-900 leading-snug">
-                      {selectedProduct.name}
+                      {selectedLocalized?.name || selectedProduct.name}
                     </h4>
                     <div className="mt-1 flex items-baseline gap-1.5">
                       <span
@@ -366,7 +386,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                       >
                         {currency} {selectedProduct.price.toFixed(2)}
                       </span>
-                      <span className="text-[11px] text-stone-400">• Qty: 1</span>
+                      <span className="text-[11px] text-stone-400">• {t("qty")}</span>
                     </div>
                   </div>
                 </div>
@@ -375,7 +395,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
               {/* Fulfillment Method Switcher */}
               <div>
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-stone-600">
-                  Fulfillment Method
+                  {t("fulfillmentAndDetails")}
                 </label>
                 <div className="grid grid-cols-2 gap-2 rounded-xl bg-stone-200/60 p-1">
                   <button
@@ -393,7 +413,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                         color: fulfillmentMethod === "delivery" ? primaryColor : "#A8A29E",
                       }}
                     />
-                    <span>Doorstep Delivery</span>
+                    <span>{t("doorstepDelivery")}</span>
                   </button>
 
                   <button
@@ -411,7 +431,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                         color: fulfillmentMethod === "pickup" ? primaryColor : "#A8A29E",
                       }}
                     />
-                    <span>Store Pickup</span>
+                    <span>{t("storePickup")}</span>
                   </button>
                 </div>
 
@@ -430,9 +450,9 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                       />
                       <div className="min-w-0">
                         <span className="font-semibold text-stone-900 group-hover:text-stone-950 flex items-center gap-1.5 flex-wrap">
-                          <span>{store.name} Pickup Address:</span>
+                          <span>{t("storePickupAddress", { store: store.name })}</span>
                           <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 border border-emerald-200/60">
-                            Maps ↗
+                            {t("maps")}
                           </span>
                         </span>
                         <p className="mt-0.5 text-[11px] text-stone-600 leading-relaxed group-hover:text-stone-700">
@@ -452,7 +472,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                   <div className="mb-1.5 flex items-center justify-between">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5 text-stone-500" />
-                      <span>Fulfillment Date</span>
+                      <span>{t("fulfillmentDate")}</span>
                     </label>
                     <div className="flex gap-1.5">
                       <button
@@ -473,7 +493,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                             : undefined
                         }
                       >
-                        {areTodayDeliveriesClosed ? "Today (Closed)" : "Today"}
+                        {areTodayDeliveriesClosed ? t("todayClosed") : t("today")}
                       </button>
                       <button
                         type="button"
@@ -493,7 +513,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                             : undefined
                         }
                       >
-                        Tomorrow
+                        {t("tomorrow")}
                       </button>
                     </div>
                   </div>
@@ -514,12 +534,12 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                   <div className="mb-1.5 flex items-center justify-between">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
                       <Clock className="h-3.5 w-3.5 text-stone-500" />
-                      <span>{isExactTimeMode ? "Exact Delivery Time" : "Preferred Time Slot"}</span>
+                      <span>{isExactTimeMode ? t("exactDeliveryTime") : t("preferredTimeSlot")}</span>
                     </label>
 
                     {!isExactTimeMode && isToday && availableTimeSlots.length < configuredSlots.length && (
                       <span className="text-[10px] font-medium text-amber-600">
-                        Past slots hidden
+                        {t("pastSlotsHidden")}
                       </span>
                     )}
 
@@ -535,18 +555,18 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                     <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-3 text-xs text-amber-900 flex items-start gap-2">
                       <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
                       <div>
-                        <p className="font-semibold text-amber-950">Same-Day Deliveries Closed</p>
+                        <p className="font-semibold text-amber-950">{t("sameDayClosed")}</p>
                         <p className="mt-0.5 text-[11px] text-amber-800 leading-relaxed">
                           {isExactTimeMode
-                            ? `Same-day deliveries require ${leadHours} hours notice before closing at ${formatTime12h(operatingEnd)}. Please select Tomorrow or a later date.`
-                            : "All fulfillment slots for today have closed. Please select Tomorrow or a later date."}
+                            ? t("sameDayClosedExact", { hours: leadHours, end: formatTime12h(operatingEnd) })
+                            : t("sameDayClosedRange")}
                         </p>
                         <button
                           type="button"
                           onClick={() => setQuickDate(1)}
                           className="mt-1.5 inline-flex items-center text-[11px] font-bold text-amber-950 underline underline-offset-2"
                         >
-                          Switch to Tomorrow &rarr;
+                          {t("switchToTomorrow")}
                         </button>
                       </div>
                     </div>
@@ -569,7 +589,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                       {quickTimePresets.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                           <span className="text-[10px] text-stone-400 uppercase font-semibold">
-                            Quick Select:
+                            {t("quickSelect")}
                           </span>
                           {quickTimePresets.map((preset) => (
                             <button
@@ -599,8 +619,10 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
 
                       {isToday && (
                         <p className="text-[10px] text-stone-500">
-                          * Minimum {leadHours}h preparation time required (earliest today:{" "}
-                          <strong>{formatTime12h(minTimeForExactInput)}</strong>).
+                          {t("minPreparationNotice", {
+                            hours: leadHours,
+                            time: formatTime12h(minTimeForExactInput),
+                          })}
                         </p>
                       )}
                     </div>
@@ -667,7 +689,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
               {/* Customer Details Section */}
               <div className="rounded-2xl border border-stone-200/80 bg-white p-3.5 shadow-xs space-y-3 overflow-hidden">
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-600">
-                  Recipient & Contact Details
+                  {t("recipientContactDetails")}
                 </label>
 
                 {/* Name */}
@@ -675,7 +697,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                   <User className="absolute top-2.5 left-3 h-4 w-4 text-stone-400" />
                   <input
                     type="text"
-                    placeholder="Recipient / Customer Name *"
+                    placeholder={t("recipientNamePlaceholder")}
                     value={customerDetails.name}
                     onChange={(e) =>
                       setCustomerDetails({ name: e.target.value })
@@ -690,7 +712,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                   <Phone className="absolute top-2.5 left-3 h-4 w-4 text-stone-400" />
                   <input
                     type="tel"
-                    placeholder="WhatsApp Phone Number *"
+                    placeholder={t("phonePlaceholder")}
                     value={customerDetails.phone}
                     onChange={(e) =>
                       setCustomerDetails({ phone: e.target.value })
@@ -705,7 +727,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                   <div className="relative">
                     <MapPin className="absolute top-2.5 left-3 h-4 w-4 text-stone-400" />
                     <textarea
-                      placeholder="Delivery Address (Unit/House No, Building, Street, Postcode, City) *"
+                      placeholder={t("addressPlaceholder")}
                       rows={2}
                       value={customerDetails.deliveryAddress}
                       onChange={(e) =>
@@ -721,7 +743,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                 <div className="relative">
                   <Heart className="absolute top-2.5 left-3 h-4 w-4 text-stone-400" />
                   <textarea
-                    placeholder="Complimentary Greeting Card Message (e.g. 'Happy Birthday Dear! Wishing you joy ✨')"
+                    placeholder={t("cardMessagePlaceholder")}
                     rows={2}
                     value={customerDetails.cardMessage}
                     onChange={(e) =>
@@ -747,7 +769,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                   style={{ backgroundColor: primaryColor }}
                 >
                   <span className="font-medium text-white/90">
-                    Proceed to Payment
+                    {t("proceedToPayment")}
                   </span>
                   <div className="flex items-center gap-1.5 font-bold">
                     <span>
@@ -761,21 +783,21 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
 
                 {/* Legal & Policy Disclaimer */}
                 <p className="mt-2.5 text-center text-[10px] text-stone-400 leading-relaxed">
-                  By ordering, you acknowledge our{" "}
+                  {t("orderConsentNotice")}{" "}
                   <button
                     type="button"
                     onClick={() => setShowPolicyModal(true)}
                     className="underline underline-offset-2 text-stone-600 hover:text-stone-900 cursor-pointer font-medium"
                   >
-                    Substitution &amp; Store Policy
+                    {t("substitutionStorePolicy")}
                   </button>{" "}
-                  and{" "}
+                  {t("and")}{" "}
                   <button
                     type="button"
                     onClick={() => setShowPolicyModal(true)}
                     className="underline underline-offset-2 text-stone-600 hover:text-stone-900 cursor-pointer font-medium"
                   >
-                    Privacy Notice (PDPA)
+                    {t("privacyNoticePdpa")}
                   </button>
                   .
                 </p>

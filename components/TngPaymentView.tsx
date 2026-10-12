@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { StoreConfig, STORES } from "@/config/stores";
+import { StoreConfig, STORES, getProductLocalized } from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
 import { sendOrderViaWhatsApp } from "@/utils/whatsapp";
+import { useTranslation } from "@/i18n/localeStore";
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,8 +26,12 @@ interface TngPaymentViewProps {
 export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp }) => {
   const currentStore = useCartStore((state) => state.currentStore);
   const store = storeProp || currentStore || STORES.autarix;
+  const { t, locale } = useTranslation();
 
   const selectedProduct = useCartStore((state) => state.selectedProduct);
+  const selectedLocalized = selectedProduct
+    ? getProductLocalized(selectedProduct, locale)
+    : null;
   const setCheckoutStep = useCartStore((state) => state.setCheckoutStep);
 
   const [hasCopiedAmount, setHasCopiedAmount] = useState(false);
@@ -87,13 +92,13 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
           className="flex items-center gap-1.5 text-xs font-semibold text-stone-600 hover:text-stone-900 transition-colors cursor-pointer"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          <span>Edit Order Details</span>
+          <span>{t("editOrderDetails")}</span>
         </button>
 
         <div className="flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
           <span>
-            {isGatewayMode ? "Instant Gateway Verification" : "Proof Verification"}
+            {isGatewayMode ? t("instantGatewayVerification") : t("proofVerification")}
           </span>
         </div>
       </div>
@@ -103,7 +108,7 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
         <div className="flex items-center justify-between">
           <div>
             <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">
-              Total Payable Amount
+              {t("totalPayableAmount")}
             </span>
             <div className="mt-0.5 text-2xl font-black text-stone-900 tracking-tight">
               {priceFormatted}
@@ -119,12 +124,12 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
             {hasCopiedAmount ? (
               <>
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                <span className="text-emerald-700 font-bold">Copied!</span>
+                <span className="text-emerald-700 font-bold">{t("copied")}</span>
               </>
             ) : (
               <>
                 <Copy className="h-3.5 w-3.5 text-stone-500" />
-                <span>Copy</span>
+                <span>{t("copy")}</span>
               </>
             )}
           </button>
@@ -132,8 +137,10 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
 
         {selectedProduct && (
           <div className="mt-3 flex items-center gap-2 border-t border-stone-100 pt-2.5 text-xs text-stone-600">
-            <span className="font-semibold text-stone-900">Arrangement:</span>
-            <span className="truncate font-medium">{selectedProduct.name}</span>
+            <span className="font-semibold text-stone-900">{t("arrangement")}</span>
+            <span className="truncate font-medium">
+              {selectedLocalized?.name || selectedProduct.name}
+            </span>
           </div>
         )}
       </div>
@@ -143,7 +150,7 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
         <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">
           <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
           <span>
-            Amount <strong>{priceFormatted}</strong> copied! Ready to paste into your eWallet.
+            {t("amountCopiedBanner", { amount: priceFormatted })}
           </span>
         </div>
       )}
@@ -156,10 +163,10 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
               <QrCode className="h-5 w-5" />
             </div>
             <h3 className="text-sm font-bold text-stone-900">
-              Touch &apos;n Go Automated Gateway
+              {t("tngAutomatedGateway")}
             </h3>
             <p className="mt-1 text-xs text-stone-600 leading-relaxed">
-              You will be redirected directly to the Touch &apos;n Go checkout for {store.name}.
+              {t("redirectGatewayDesc", { store: store.name })}
             </p>
           </div>
 
@@ -168,7 +175,7 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
             onClick={handleProceedGateway}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0055B8] py-3.5 px-4 text-sm font-bold text-white shadow-md shadow-blue-500/20 hover:bg-[#00479b] active:scale-98 transition-all cursor-pointer"
           >
-            <span>Pay {priceFormatted} via Touch &apos;n Go</span>
+            <span>{t("payViaTng", { amount: priceFormatted })}</span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
@@ -188,10 +195,10 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
                 </div>
                 <div>
                   <div className="text-xs font-bold leading-tight">
-                    Open Touch &apos;n Go eWallet App
+                    {t("openTngApp")}
                   </div>
                   <div className="text-[10px] text-blue-100 font-medium">
-                    Copies {priceFormatted} & launches TNG App
+                    {t("openTngAppSubtitle", { amount: priceFormatted })}
                   </div>
                 </div>
               </div>
@@ -200,7 +207,7 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
 
             {hasLaunchedApp && (
               <p className="mt-1.5 text-center text-[10px] text-stone-500">
-                Opening Touch &apos;n Go... If app didn&apos;t open automatically, scan QR below.
+                {t("openingTngHelper")}
               </p>
             )}
           </div>
@@ -210,7 +217,7 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
             <div className="mb-2.5 flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1 text-stone-700">
               <QrCode className="h-3.5 w-3.5 text-stone-600" />
               <span className="text-[11px] font-bold tracking-wide">
-                Or Scan Payment QR Code
+                {t("orScanQr")}
               </span>
             </div>
 
@@ -228,7 +235,8 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
             </div>
 
             <p className="mt-2.5 text-center text-[11px] text-stone-500">
-              Account: <span className="font-bold text-stone-800">{store.tngAccountName || store.name}</span>
+              {t("accountLabel")}{" "}
+              <span className="font-bold text-stone-800">{store.tngAccountName || store.name}</span>
             </p>
 
             <a
@@ -237,7 +245,7 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
               rel="noopener noreferrer"
               className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-stone-600 hover:text-stone-900 underline underline-offset-2"
             >
-              <span>View QR Fullscreen</span>
+              <span>{t("viewQrFullscreen")}</span>
               <ExternalLink className="h-3 w-3 text-stone-400" />
             </a>
           </div>
@@ -246,12 +254,12 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
           <div className="rounded-2xl border border-amber-200/60 bg-amber-50/50 p-3.5 text-xs">
             <p className="font-bold text-amber-950 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
               <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-              <span>How to complete order</span>
+              <span>{t("howToCompleteOrder")}</span>
             </p>
             <ol className="mt-2 list-decimal list-inside space-y-1 text-[11px] leading-relaxed text-amber-900/90 pl-0.5">
-              <li>Tap <strong>&quot;Open Touch &apos;n Go eWallet&quot;</strong> above (amount is copied).</li>
-              <li>Transfer <span className="font-bold">{priceFormatted}</span> & take a screenshot of your receipt.</li>
-              <li>Tap below to send your order details & receipt proof via WhatsApp!</li>
+              <li>{t("step1Guide")}</li>
+              <li>{t("step2Guide", { amount: priceFormatted })}</li>
+              <li>{t("step3Guide")}</li>
             </ol>
           </div>
 
@@ -263,11 +271,11 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3.5 px-4 text-sm font-bold text-white shadow-md shadow-emerald-500/20 transition-all duration-200 hover:bg-[#20ba59] active:scale-98 cursor-pointer"
             >
               <MessageCircle className="h-5 w-5 fill-white text-[#25D366]" />
-              <span>Confirm & Send WhatsApp</span>
+              <span>{t("confirmSendWhatsapp")}</span>
             </button>
 
             <p className="mt-2 text-center text-[11px] text-stone-400">
-              Your WhatsApp will open with a pre-filled order summary ready to attach your payment receipt.
+              {t("whatsappHelperText")}
             </p>
           </div>
         </div>

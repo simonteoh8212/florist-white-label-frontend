@@ -3,7 +3,8 @@
 import React, { useEffect } from "react";
 import Image from "next/image";
 import { X, ShoppingBag, Sparkles, ZoomIn } from "lucide-react";
-import { Product, StoreConfig } from "@/config/stores";
+import { Product, StoreConfig, getProductLocalized } from "@/config/stores";
+import { useTranslation } from "@/i18n/localeStore";
 
 interface ProductImageModalProps {
   product: Product | null;
@@ -20,6 +21,9 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
   onClose,
   onOrderNow,
 }) => {
+  const { t, locale, getCategory } = useTranslation();
+  const localized = product ? getProductLocalized(product, locale) : null;
+
   // Close on Escape key press
   useEffect(() => {
     if (!isOpen) return;
@@ -70,7 +74,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close full picture"
+          aria-label={t("closeFullPicture")}
           className="absolute top-3.5 right-3.5 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white/90 border border-white/20 backdrop-blur-md transition-all hover:bg-black/80 hover:text-white hover:scale-105 active:scale-95 cursor-pointer shadow-md"
         >
           <X className="h-5 w-5" />
@@ -80,7 +84,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
         <div className="relative flex-1 min-h-[300px] max-h-[62vh] sm:max-h-[68vh] w-full bg-stone-950/70 flex items-center justify-center overflow-hidden">
           <Image
             src={product.image}
-            alt={product.name}
+            alt={localized?.name || product.name}
             fill
             sizes="(max-width: 768px) 100vw, 680px"
             className="object-contain p-1 sm:p-2 select-none"
@@ -89,15 +93,15 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
 
           {/* Floating Badges */}
           <div className="absolute top-3.5 left-3.5 z-10 flex flex-wrap gap-2">
-            {product.tag && (
+            {localized?.tag && (
               <span className="flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white border border-white/15 backdrop-blur-md shadow-xs">
                 <Sparkles className="h-3 w-3 text-amber-400" />
-                <span>{product.tag}</span>
+                <span>{localized.tag}</span>
               </span>
             )}
             {product.category && (
               <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white border border-white/10 backdrop-blur-md">
-                {product.category}
+                {getCategory(product.category)}
               </span>
             )}
           </div>
@@ -111,10 +115,10 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
                 id="modal-product-title"
                 className="text-base sm:text-lg font-bold tracking-tight text-white leading-snug truncate"
               >
-                {product.name}
+                {localized?.name || product.name}
               </h3>
               <p className="mt-1 text-xs text-stone-300 line-clamp-2 leading-relaxed">
-                {product.description}
+                {localized?.description || product.description}
               </p>
             </div>
             <div className="text-right shrink-0">
@@ -124,7 +128,9 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
               >
                 {currency} {product.price.toFixed(2)}
               </span>
-              <span className="text-[10px] text-stone-400 font-medium">Fresh Arrangement</span>
+              <span className="text-[10px] text-stone-400 font-medium">
+                {t("freshArrangement")}
+              </span>
             </div>
           </div>
 
@@ -137,14 +143,18 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
               style={{ backgroundColor: primaryColor }}
             >
               <ShoppingBag className="h-4 w-4" />
-              <span>Order Now • {currency} {product.price.toFixed(2)}</span>
+              <span>
+                {t("orderNowPrice", {
+                  price: `${currency} ${product.price.toFixed(2)}`,
+                })}
+              </span>
             </button>
             <button
               type="button"
               onClick={onClose}
               className="rounded-xl border border-white/15 bg-white/5 py-3 px-4 text-xs sm:text-sm font-semibold text-stone-300 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
             >
-              Back
+              {t("back")}
             </button>
           </div>
         </div>

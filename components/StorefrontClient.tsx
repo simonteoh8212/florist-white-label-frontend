@@ -8,6 +8,8 @@ import { ProductCard } from "@/components/ProductCard";
 import { CheckoutDrawer } from "@/components/CheckoutDrawer";
 import { ProductImageModal } from "@/components/ProductImageModal";
 import { StorePolicyModal } from "@/components/StorePolicyModal";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { useTranslation } from "@/i18n/localeStore";
 import {
   ArrowUp,
   ArrowUpDown,
@@ -33,6 +35,7 @@ interface StorefrontClientProps {
 }
 
 export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => {
+  const { t, getCategory } = useTranslation();
   const syncTenantStore = useCartStore((state) => state.syncTenantStore);
   const openCheckoutWithProduct = useCartStore(
     (state) => state.openCheckoutWithProduct
@@ -108,10 +111,16 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter((p) => {
-        const nameMatch = p.name.toLowerCase().includes(q);
-        const descMatch = p.description?.toLowerCase().includes(q);
+        const nameMatch =
+          p.name.toLowerCase().includes(q) ||
+          Boolean(p.nameZh?.toLowerCase().includes(q));
+        const descMatch =
+          p.description?.toLowerCase().includes(q) ||
+          Boolean(p.descriptionZh?.toLowerCase().includes(q));
         const catMatch = p.category?.toLowerCase().includes(q);
-        const tagMatch = p.tag?.toLowerCase().includes(q);
+        const tagMatch =
+          p.tag?.toLowerCase().includes(q) ||
+          Boolean(p.tagZh?.toLowerCase().includes(q));
         return nameMatch || descMatch || catMatch || tagMatch;
       });
     }
@@ -151,7 +160,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
   // Display version strips +6 or 6 prefix (e.g. "+6012-542 0555" -> "012-542 0555")
   const displayWhatsappNumber = store.whatsapp.replace(/^\+?6/, "");
 
-  const generalInquiryUrl = `https://wa.me/${cleanWhatsappNumber}?text=${encodeURIComponent(
+  const generalInquiryUrl = `https://api.whatsapp.com/send?phone=${cleanWhatsappNumber}&text=${encodeURIComponent(
     `Hello ${store.name}! I have a quick question regarding your arrangements.`
   )}`;
 
@@ -183,13 +192,13 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
           style={{ backgroundColor: store.primaryColor }}
         >
           <Sparkles className="h-3 w-3" />
-          <span>Same-Day Delivery & Pickup Available</span>
+          <span>{t("announcement")}</span>
         </div>
 
         {/* Brand Header (Sticky at top) */}
-        <header className="relative flex h-16 items-center justify-between border-b border-stone-100 bg-white/95 px-4 backdrop-blur-md sticky top-0 z-30">
-          <div className="flex items-center gap-3">
-            <div className="relative h-10 w-10 overflow-hidden rounded-full border border-stone-200 bg-stone-100 shadow-2xs">
+        <header className="relative flex h-16 items-center justify-between border-b border-stone-100 bg-white/95 px-3.5 backdrop-blur-md sticky top-0 z-30">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-stone-200 bg-stone-100 shadow-2xs">
               <Image
                 src={store.logo}
                 alt={`${store.name} Logo`}
@@ -199,26 +208,31 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                 priority
               />
             </div>
-            <div>
-              <h1 className="text-base font-bold tracking-tight text-stone-900 leading-tight">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-sm sm:text-base font-bold tracking-tight text-stone-900 leading-tight truncate">
                 {store.name}
               </h1>
-              <p className="text-[11px] font-medium text-stone-500">
-                {store.tagline || "Curated Artisanal Blooms"}
+              <p className="text-[10px] sm:text-[11px] font-medium text-stone-500 truncate">
+                {store.tagline || t("heroSubtitle")}
               </p>
             </div>
           </div>
 
-          <a
-            href={generalInquiryUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200/80 transition-all active:scale-95 hover:bg-emerald-100"
-            aria-label={`Chat with ${store.name} on WhatsApp`}
-          >
-            <MessageCircle className="h-3.5 w-3.5 fill-emerald-600 text-emerald-600" />
-            <span>Chat</span>
-          </a>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {store.enableLanguageSelector !== false && (
+              <LanguageSelector primaryColor={store.primaryColor} />
+            )}
+            <a
+              href={generalInquiryUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/80 transition-all active:scale-95 hover:bg-emerald-100 whitespace-nowrap shrink-0 shadow-2xs"
+              aria-label={t("chatAria", { store: store.name })}
+            >
+              <MessageCircle className="h-3.5 w-3.5 fill-emerald-600 text-emerald-600 shrink-0" />
+              <span className="whitespace-nowrap">{t("chat")}</span>
+            </a>
+          </div>
         </header>
 
         {/* Hero Banner / Studio Introduction */}
@@ -229,13 +243,13 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                 className="h-3 w-3"
                 style={{ color: store.primaryColor, fill: store.primaryColor }}
               />
-              <span>Artisanal Collection</span>
+              <span>{t("artisanalCollection")}</span>
             </div>
             <h2 className="mt-1 text-lg font-bold text-stone-900 tracking-tight leading-snug">
-              {store.tagline || "Curated Blooms For Life’s Most Beautiful Moments"}
+              {store.tagline || t("heroSubtitle")}
             </h2>
             <p className="mt-1 text-xs text-stone-600 leading-relaxed">
-              Order your floral arrangement, specify fulfillment details, and complete your order seamlessly with Touch &apos;n Go payment proof.
+              {t("heroDesc")}
             </p>
 
             {/* Micro Perks Strip */}
@@ -243,19 +257,19 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
               <div className="flex flex-col items-center gap-1">
                 <Truck className="h-4 w-4 text-stone-700" />
                 <span className="text-[10px] font-medium text-stone-600 leading-tight">
-                  Doorstep Delivery
+                  {t("doorstepDelivery")}
                 </span>
               </div>
               <div className="flex flex-col items-center gap-1">
                 <Clock className="h-4 w-4 text-stone-700" />
                 <span className="text-[10px] font-medium text-stone-600 leading-tight">
-                  Selected Slots
+                  {t("selectedSlots")}
                 </span>
               </div>
               <div className="flex flex-col items-center gap-1">
                 <ShieldCheck className="h-4 w-4 text-emerald-600" />
                 <span className="text-[10px] font-medium text-stone-600 leading-tight">
-                  TNG eWallet Proof
+                  {t("tngProof")}
                 </span>
               </div>
             </div>
@@ -271,7 +285,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search flowers, bouquets, balloons, roses..."
+                placeholder={t("searchPlaceholder")}
                 className="w-full rounded-2xl border border-stone-200/90 bg-white py-2.5 pl-10 pr-9 text-xs text-stone-900 shadow-2xs placeholder:text-stone-400 focus:border-stone-400 focus:outline-none transition-all"
               />
               {searchQuery && (
@@ -279,7 +293,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                   type="button"
                   onClick={() => setSearchQuery("")}
                   className="absolute right-3 rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer"
-                  aria-label="Clear search"
+                  aria-label={t("clearSearch")}
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -305,10 +319,10 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                       }
                     : undefined
                 }
-                aria-label="Sort options"
+                aria-label={t("sortByPrice")}
                 aria-haspopup="true"
                 aria-expanded={isSortOpen}
-                title="Sort arrangements"
+                title={t("sortByPrice")}
               >
                 <ArrowUpDown className="h-4 w-4" />
                 {sortOrder !== "none" && (
@@ -322,7 +336,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
               {isSortOpen && (
                 <div className="absolute right-0 top-full mt-2 z-40 w-48 rounded-2xl border border-stone-200/90 bg-white p-1.5 shadow-xl shadow-stone-900/10 backdrop-blur-lg animate-in fade-in">
                   <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                    Sort By Price
+                    {t("sortByPrice")}
                   </div>
                   <div className="space-y-0.5">
                     <button
@@ -344,7 +358,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                           : undefined
                       }
                     >
-                      <span>Price: High to Low</span>
+                      <span>{t("priceHighLow")}</span>
                       {sortOrder === "price_high_low" && (
                         <Check
                           className="h-3.5 w-3.5"
@@ -371,7 +385,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                           : undefined
                       }
                     >
-                      <span>Price: Low to High</span>
+                      <span>{t("priceLowHigh")}</span>
                       {sortOrder === "price_low_high" && (
                         <Check
                           className="h-3.5 w-3.5"
@@ -391,7 +405,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                         }}
                         className="flex w-full items-center justify-center rounded-xl px-3 py-1.5 text-[11px] font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800 transition-colors cursor-pointer"
                       >
-                        Reset to default
+                        {t("resetDefault")}
                       </button>
                     </div>
                   )}
@@ -422,7 +436,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                       : undefined
                   }
                 >
-                  {cat}
+                  {cat === "All" ? t("allCategories") : getCategory(cat)}
                 </button>
               );
             })}
@@ -434,11 +448,11 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
           <div className="flex items-center justify-between pb-2.5">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
-                Floral Catalog ({filteredProducts.length})
+                {t("floralCatalog")} ({filteredProducts.length})
               </span>
               {searchQuery && (
                 <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                  Search: &ldquo;{searchQuery}&rdquo;
+                  {t("searchBadge")}: &ldquo;{searchQuery}&rdquo;
                 </span>
               )}
               {sortOrder !== "none" && (
@@ -446,19 +460,19 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                   type="button"
                   onClick={() => setSortOrder("none")}
                   className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-700 hover:bg-stone-200 transition-colors cursor-pointer"
-                  title="Remove sorting"
+                  title={t("removeSorting")}
                 >
                   <span>
                     {sortOrder === "price_high_low"
-                      ? "Price: High to Low"
-                      : "Price: Low to High"}
+                      ? t("priceHighLow")
+                      : t("priceLowHigh")}
                   </span>
                   <X className="h-3 w-3 text-stone-400 hover:text-stone-700" />
                 </button>
               )}
             </div>
             <span className="text-[11px] text-stone-500">
-              Prices in {currency}
+              {t("pricesIn")} {currency}
             </span>
           </div>
 
@@ -469,10 +483,10 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                 <Search className="h-6 w-6" />
               </div>
               <h3 className="mt-3 text-sm font-bold text-stone-900">
-                No arrangements found
+                {t("noArrangements")}
               </h3>
               <p className="mt-1 text-xs text-stone-500 max-w-xs mx-auto">
-                We couldn&apos;t find any flowers matching &ldquo;{searchQuery}&rdquo;. Try another keyword or browse our categories.
+                {t("noArrangementsDesc", { query: searchQuery })}
               </p>
               <button
                 type="button"
@@ -483,7 +497,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                 }}
                 className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 transition-all cursor-pointer"
               >
-                Clear Search &amp; Filters
+                {t("clearSearchFilters")}
               </button>
             </div>
           ) : (
@@ -507,11 +521,14 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                 onClick={handleLoadMore}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-6 py-3 text-xs font-bold text-stone-800 shadow-xs transition-all hover:border-stone-300 hover:bg-stone-50 hover:shadow-sm active:scale-98 cursor-pointer"
               >
-                <span>Show More Arrangements</span>
+                <span>{t("showMore")}</span>
                 <ChevronDown className="h-4 w-4 text-stone-500" />
               </button>
               <span className="text-[11px] text-stone-400">
-                Showing {displayedProducts.length} of {filteredProducts.length} items
+                {t("showingCount", {
+                  count: displayedProducts.length,
+                  total: filteredProducts.length,
+                })}
               </span>
             </div>
           )}
@@ -537,10 +554,10 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <p className="font-bold text-stone-900 group-hover:text-stone-950">
-                      {store.name} Atelier Pickup
+                      {store.name} {t("atelierPickup")}
                     </p>
                     <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200/60">
-                      Google Maps ↗
+                      {t("googleMaps")}
                     </span>
                   </div>
                   <p className="mt-0.5 text-stone-600 leading-relaxed text-[11px] group-hover:text-stone-700">
@@ -590,7 +607,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
               onClick={() => setShowPolicyModal(true)}
               className="hover:text-stone-800 underline underline-offset-2 transition-colors cursor-pointer"
             >
-              Store Policy &amp; Terms
+              {t("storePolicyTerms")}
             </button>
             <span>•</span>
             <button
@@ -598,16 +615,16 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
               onClick={() => setShowPolicyModal(true)}
               className="hover:text-stone-800 underline underline-offset-2 transition-colors cursor-pointer"
             >
-              Privacy Notice (PDPA)
+              {t("privacyNotice")}
             </button>
           </div>
 
           <div className="pt-1 space-y-0.5">
             <p className="text-[10px] text-stone-400">
-              Powered by <span className="font-semibold text-stone-500">flowerapp.my</span> • Platform Provider
+              {t("poweredBy")}
             </p>
             <p className="text-[9px] text-stone-400 max-w-xs mx-auto leading-tight">
-              All orders, payments, fulfillment, and inquiries are handled directly by {store.name}.
+              {t("footerDisclaimer", { store: store.name })}
             </p>
           </div>
         </footer>
@@ -621,8 +638,8 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
               ? "opacity-100 translate-y-0 pointer-events-auto"
               : "opacity-0 translate-y-4 pointer-events-none"
           }`}
-          aria-label="Scroll to top of page"
-          title="Scroll to top"
+          aria-label={t("scrollTop")}
+          title={t("scrollTop")}
         >
           <ArrowUp className="h-5 w-5" />
         </button>
