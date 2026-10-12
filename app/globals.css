@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --brand-color: #be185d;
+    --brand-color-rgb: 190, 24, 93;
+    --brand-light: #fdf2f8;
+    color-scheme: light;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: #faf9f6;
+    color: #1c1917;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    min-height: 100vh;
+  }
+}
