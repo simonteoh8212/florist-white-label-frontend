@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { Product, StoreConfig } from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
@@ -8,15 +8,18 @@ import { ProductCard } from "@/components/ProductCard";
 import { CheckoutDrawer } from "@/components/CheckoutDrawer";
 import { ProductImageModal } from "@/components/ProductImageModal";
 import {
+  ChevronDown,
   Clock,
   ExternalLink,
   Heart,
   MapPin,
   MessageCircle,
   Phone,
+  Search,
   ShieldCheck,
   Sparkles,
   Truck,
+  X,
 } from "lucide-react";
 
 interface StorefrontClientProps {
@@ -33,8 +36,10 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
   useEffect(() => {
     syncTenantStore(store);
   }, [store, syncTenantStore]);
-
+  const DEFAULT_VISIBLE_COUNT = 6
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [searchQuery, setSearchQuery] = useState<string>("" );
+  const [visibleCount, setVisibleCount] = useState<number>(DEFAULT_VISIBLE_COUNT);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
 
   const categories = [
@@ -48,10 +53,42 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
     ),
   ];
 
-  const filteredProducts =
-    selectedCategory === "All"
-      ? store.products
-      : store.products.filter((p) => p.category === selectedCategory);
+  // Filter products by selected category and instant search query
+  const filteredProducts = useMemo(() => {
+    let list = store.products;
+
+    if (selectedCategory !== "All") {
+      list = list.filter((p) => p.category === selectedCategory);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((p) => {
+        const nameMatch = p.name.toLowerCase().includes(q);
+        const descMatch = p.description?.toLowerCase().includes(q);
+        const catMatch = p.category?.toLowerCase().includes(q);
+        const tagMatch = p.tag?.toLowerCase().includes(q);
+        return nameMatch || descMatch || catMatch || tagMatch;
+      });
+    }
+
+    return list;
+  }, [store.products, selectedCategory, searchQuery]);
+
+  // Reset pagination count whenever category or search query changes
+  useEffect(() => {
+    setVisibleCount(DEFAULT_VISIBLE_COUNT);
+  }, [selectedCategory, searchQuery]);
+
+  const displayedProducts = useMemo(() => {
+    return filteredProducts.slice(0, visibleCount);
+  }, [filteredProducts, visibleCount]);
+
+  const hasMore = visibleCount < filteredProducts.length;
+
+  const handleLoadMore = () => {
+    setVisibleCount((prev) => prev + DEFAULT_VISIBLE_COUNT);
+  };
 
   // Format clean numbers for link and display
   const digitsOnly = store.whatsapp.replace(/\D/g, "");
@@ -175,6 +212,30 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
           </div>
         </section>
 
+        {/* Instant Search Bar */}
+        <section className="px-4 pt-2.5 pb-1">
+          <div className="relative flex items-center">
+            <Search className="absolute left-3.5 h-4 w-4 text-stone-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search flowers, bouquets, balloons, roses..."
+              className="w-full rounded-2xl border border-stone-200/90 bg-white py-2.5 pl-10 pr-9 text-xs text-stone-900 shadow-2xs placeholder:text-stone-400 focus:border-stone-400 focus:outline-none transition-all"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer"
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </section>
+
         {/* Category Filter Pills */}
         <section className="px-4 py-2">
           <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pb-1">
@@ -205,24 +266,73 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
         {/* Catalog Grid */}
         <section className="flex-1 px-4 py-2">
           <div className="flex items-center justify-between pb-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
-              Floral Catalog ({filteredProducts.length})
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
+                Floral Catalog ({filteredProducts.length})
+              </span>
+              {searchQuery && (
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                  Search: &ldquo;{searchQuery}&rdquo;
+                </span>
+              )}
+            </div>
             <span className="text-[11px] text-stone-500">
               Prices in {currency}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {filteredProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                store={store}
-                onViewImage={(p) => setPreviewProduct(p)}
-              />
-            ))}
-          </div>
+          {/* Empty Search State */}
+          {displayedProducts.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-stone-300 bg-white/70 p-8 text-center my-4">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-stone-100 text-stone-400">
+                <Search className="h-6 w-6" />
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-stone-900">
+                No arrangements found
+              </h3>
+              <p className="mt-1 text-xs text-stone-500 max-w-xs mx-auto">
+                We couldn&apos;t find any flowers matching &ldquo;{searchQuery}&rdquo;. Try another keyword or browse our categories.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedCategory("All");
+                }}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 transition-all cursor-pointer"
+              >
+                Clear Search &amp; Filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {displayedProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  store={store}
+                  onViewImage={(p) => setPreviewProduct(p)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Progressive "Show More" Button for Large Catalogs */}
+          {hasMore && (
+            <div className="mt-6 flex flex-col items-center gap-2 pb-2">
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-6 py-3 text-xs font-bold text-stone-800 shadow-xs transition-all hover:border-stone-300 hover:bg-stone-50 hover:shadow-sm active:scale-98 cursor-pointer"
+              >
+                <span>Show More Arrangements</span>
+                <ChevronDown className="h-4 w-4 text-stone-500" />
+              </button>
+              <span className="text-[11px] text-stone-400">
+                Showing {displayedProducts.length} of {filteredProducts.length} items
+              </span>
+            </div>
+          )}
         </section>
 
         {/* Store Pickup Notice (Click to open Google Maps) */}
