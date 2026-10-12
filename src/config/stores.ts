@@ -36,6 +36,8 @@ export interface StoreConfig {
   id: string;
   name: string;
   slug: string;
+  companyName?: string; // Registered business / company entity name (e.g. "Autarix Floral & Gift")
+  ssmNumber?: string; // SSM registration number (e.g. "PG0523418-V" or "202301048291 (1528211-T)")
   whatsapp: string; // E.164 string format, e.g. "+60123456789"
   primaryColor: string; // Hex color string, e.g. "#BE185D"
   logo: string; // Path or URL to store logo, e.g. "/stores/autarix/logo.svg"
@@ -63,6 +65,8 @@ export const STORES: Record<string, StoreConfig> = {
   autarix: {
     id: "store_autarix",
     name: "Autarix Floral & Gift",
+    companyName: "Autarix Floral & Gift",
+    ssmNumber: "PG0523418-V",
     slug: "autarix",
     whatsapp: "+6012-542 0555",
     primaryColor: "#BE185D", // Luxe Crimson / Rose
@@ -91,6 +95,8 @@ export const STORES: Record<string, StoreConfig> = {
   greenland: {
     id: "store_greenland",
     name: "Greenland Botanical & Living Florals",
+    companyName: "Greenland Botanical Sdn. Bhd.",
+    ssmNumber: "202301048291 (1528211-T)",
     slug: "greenland",
     whatsapp: "+60198765432",
     primaryColor: "#059669", // Botanical Emerald

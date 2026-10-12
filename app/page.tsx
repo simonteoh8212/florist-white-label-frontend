@@ -267,8 +267,11 @@ export default function RootPlatformPage() {
           <p className="text-xs font-bold text-stone-800">
             flowerapp.my
           </p>
-          <p className="mt-0.5 text-[11px] text-stone-500">
-            White-Label Florist Catalog Platform
+          <p className="mt-0.5 text-[11px] text-stone-500 font-medium">
+            E-Commerce Software Platform for Independent Florist Ateliers
+          </p>
+          <p className="mt-2 text-[10px] text-stone-400 max-w-sm mx-auto leading-relaxed">
+            flowerapp.my is a technology platform and is not a merchant, seller, florist, or delivery agent. All floral arrangements, pricing, deliveries, and transactions are managed independently by respective partner florists.
           </p>
         </footer>
       </main>
