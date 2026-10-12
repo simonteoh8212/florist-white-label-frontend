@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <rect width="300" height="300" fill="#FFFFFF" rx="16"/>
+  <!-- TNG Header -->
+  <rect x="0" y="0" width="300" height="46" fill="#0055B8" rx="16 16 0 0"/>
+  <text x="150" y="28" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF" text-anchor="middle" letter-spacing="1">TOUCH 'N GO EWALLET • AUTARIX</text>
+  
+  <!-- Stylized DuitNow / QR Code matrix representation -->
+  <g fill="#0055B8" transform="translate(40, 65)">
+    <!-- Corner Positioning Squares -->
+    <rect x="0" y="0" width="48" height="48" rx="6" />
+    <rect x="8" y="8" width="32" height="32" fill="#FFFFFF" rx="4" />
+    <rect x="16" y="16" width="16" height="16" fill="#0055B8" rx="2" />
+    
+    <rect x="172" y="0" width="48" height="48" rx="6" />
+    <rect x="180" y="8" width="32" height="32" fill="#FFFFFF" rx="4" />
+    <rect x="188" y="16" width="16" height="16" fill="#0055B8" rx="2" />
+    
+    <rect x="0" y="132" width="48" height="48" rx="6" />
+    <rect x="8" y="140" width="32" height="32" fill="#FFFFFF" rx="4" />
+    <rect x="16" y="148" width="16" height="16" fill="#0055B8" rx="2" />
+    
+    <!-- Pattern modules -->
+    <rect x="64" y="8" width="12" height="24" rx="2" />
+    <rect x="88" y="4" width="20" height="12" rx="2" />
+    <rect x="120" y="12" width="36" height="12" rx="2" />
+    <rect x="60" y="40" width="24" height="12" rx="2" />
+    <rect x="96" y="32" width="16" height="24" rx="2" />
+    <rect x="124" y="36" width="32" height="12" rx="2" />
+    <rect x="20" y="64" width="32" height="12" rx="2" />
+    <rect x="68" y="68" width="40" height="16" rx="2" />
+    <rect x="120" y="60" width="16" height="32" rx="2" />
+    <rect x="152" y="64" width="40" height="16" rx="2" />
+    <rect x="16" y="92" width="20" height="20" rx="2" />
+    <rect x="52" y="96" width="28" height="12" rx="2" />
+    <rect x="92" y="92" width="16" height="28" rx="2" />
+    <rect x="124" y="104" width="36" height="16" rx="2" />
+    <rect x="172" y="92" width="44" height="12" rx="2" />
+    <rect x="64" y="124" width="32" height="16" rx="2" />
+    <rect x="108" y="132" width="24" height="12" rx="2" />
+    <rect x="144" y="120" width="20" height="28" rx="2" />
+    <rect x="176" y="128" width="36" height="16" rx="2" />
+    <rect x="64" y="152" width="20" height="24" rx="2" />
+    <rect x="96" y="156" width="40" height="16" rx="2" />
+    <rect x="148" y="160" width="32" height="16" rx="2" />
+    <rect x="192" y="156" width="24" height="20" rx="2" />
+  </g>
+
+  <!-- Store Name Subtitle -->
+  <text x="150" y="278" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" font-weight="600" fill="#4B5563" text-anchor="middle">Scan via Touch 'n Go eWallet App</text>
+</svg>

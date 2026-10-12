@@ -1,221 +1,186 @@
-"use client";
-
-import React, { useState } from "react";
+import React from "react";
 import Image from "next/image";
-import { floristConfig } from "@/config/florist.config";
-import { ProductCard } from "@/components/ProductCard";
-import { CheckoutDrawer } from "@/components/CheckoutDrawer";
+import Link from "next/link";
+import { STORES } from "@/config/stores";
 import {
-  Clock,
-  Heart,
+  ArrowRight,
+  ExternalLink,
+  Layers,
   MapPin,
   MessageCircle,
   Phone,
   ShieldCheck,
   Sparkles,
-  Truck,
+  Store,
+  Terminal,
 } from "lucide-react";
 
-export default function Home() {
-  const [selectedCategory, setSelectedCategory] = useState<string>("All");
-
-  const categories = [
-    "All",
-    ...Array.from(
-      new Set(
-        floristConfig.products
-          .map((p) => p.category)
-          .filter((c): c is string => Boolean(c))
-      )
-    ),
-  ];
-
-  const filteredProducts =
-    selectedCategory === "All"
-      ? floristConfig.products
-      : floristConfig.products.filter((p) => p.category === selectedCategory);
-
-  const cleanWhatsappNumber = floristConfig.whatsappNumber.replace(/\D/g, "");
-  const generalInquiryUrl = `https://wa.me/${cleanWhatsappNumber}?text=${encodeURIComponent(
-    `Hello ${floristConfig.storeName}! I have a quick question about your floral arrangements.`
-  )}`;
+export default function RootPlatformPage() {
+  const storeList = Object.values(STORES);
 
   return (
-    <div
-      className="min-h-screen bg-[#faf8f5] text-stone-900"
-      style={
-        {
-          "--brand-color": floristConfig.brandHexColor,
-        } as React.CSSProperties
-      }
-    >
-      {/* Mobile-first centered container */}
-      <main className="mx-auto flex min-h-screen max-w-md flex-col bg-white shadow-xl shadow-stone-200/50 sm:rounded-3xl sm:my-6 sm:overflow-hidden sm:border sm:border-stone-200/60">
-        {/* Top Announcement Bar */}
-        <div
-          className="flex items-center justify-center gap-1.5 py-2 px-4 text-center text-[11px] font-semibold text-white tracking-wide"
-          style={{ backgroundColor: floristConfig.brandHexColor }}
-        >
-          <Sparkles className="h-3 w-3" />
-          <span>Same-Day Delivery & Pickup Available Today</span>
-        </div>
-
-        {/* Brand Header */}
-        <header className="relative flex items-center justify-between border-b border-stone-100 bg-white/80 px-4 py-3.5 backdrop-blur-md sticky top-0 z-30">
-          <div className="flex items-center gap-3">
-            <div className="relative h-10 w-10 overflow-hidden rounded-full border border-stone-200 bg-stone-100 shadow-2xs">
-              <Image
-                src={floristConfig.logoUrl}
-                alt={`${floristConfig.storeName} Logo`}
-                fill
-                className="object-cover"
-                priority
-              />
+    <div className="min-h-screen bg-[#faf8f5] text-stone-900 selection:bg-rose-100 selection:text-rose-900">
+      {/* Centered mobile-first and desktop-friendly platform container */}
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-white shadow-2xl shadow-stone-200/60 sm:my-8 sm:rounded-3xl sm:border sm:border-stone-200/80 sm:overflow-hidden">
+        {/* Platform Header */}
+        <header className="border-b border-stone-100 bg-white/80 p-5 backdrop-blur-md sticky top-0 z-20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-rose-600 to-amber-500 text-white shadow-md shadow-rose-500/20">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-base font-extrabold tracking-tight text-stone-900">
+                  flowerapp<span className="text-rose-600">.my</span>
+                </h1>
+              </div>
             </div>
-            <div>
-              <h1 className="text-base font-bold tracking-tight text-stone-900 leading-tight">
-                {floristConfig.storeName}
-              </h1>
-              <p className="text-[11px] font-medium text-stone-500">
-                {floristConfig.tagline}
-              </p>
+
+            <div className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 border border-emerald-200/60">
+              <Layers className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Multi-Tenant Active</span>
             </div>
           </div>
-
-          <a
-            href={generalInquiryUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200/80 transition-all active:scale-95 hover:bg-emerald-100"
-            aria-label="Chat on WhatsApp"
-          >
-            <MessageCircle className="h-3.5 w-3.5 fill-emerald-600 text-emerald-600" />
-            <span>Chat</span>
-          </a>
         </header>
 
-        {/* Hero Banner / Studio Introduction */}
-        <section className="relative px-4 pt-4 pb-2">
-          <div className="rounded-2xl bg-gradient-to-br from-rose-50/70 via-stone-50 to-amber-50/50 p-4 border border-stone-200/60">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
-              <Heart className="h-3 w-3 text-rose-500 fill-rose-500" />
-              <span>Boutique Floral Collections</span>
+        {/* Hero Section */}
+        <section className="p-5 pb-3">
+          <div className="rounded-3xl bg-gradient-to-br from-stone-900 via-stone-800 to-stone-900 p-6 text-white shadow-lg">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-amber-300">
+              <Store className="h-3.5 w-3.5" />
+              <span>Wildcard Subdomain Routing</span>
             </div>
-            <h2 className="mt-1 text-lg font-bold text-stone-900 tracking-tight leading-snug">
-              Curated Blooms For Life’s Most Beautiful Moments
+            <h2 className="mt-2 text-xl font-extrabold tracking-tight leading-snug">
+              Every Florist Gets Their Own Branded Subdomain
             </h2>
-            <p className="mt-1 text-xs text-stone-600 leading-relaxed">
-              Select your arrangement, choose delivery or store pickup, and complete your order with Touch &apos;n Go instant payment verification.
+            <p className="mt-1.5 text-xs text-stone-300 leading-relaxed">
+              Experience dynamic tenant switching powered by Next.js Edge Middleware. Each storefront features custom branding, isolated carts, Touch &apos;n Go QR proofs, and tailored WhatsApp checkout bridges.
             </p>
 
-            {/* Micro Perks Strip */}
-            <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-stone-200/60 pt-3 text-center">
-              <div className="flex flex-col items-center gap-1">
-                <Truck className="h-4 w-4 text-stone-700" />
-                <span className="text-[10px] font-medium text-stone-600 leading-tight">
-                  Doorstep Delivery
-                </span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <Clock className="h-4 w-4 text-stone-700" />
-                <span className="text-[10px] font-medium text-stone-600 leading-tight">
-                  Scheduled Slots
-                </span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                <span className="text-[10px] font-medium text-stone-600 leading-tight">
-                  TNG eWallet Proof
-                </span>
-              </div>
+            <div className="mt-4 rounded-xl bg-white/10 p-2.5 text-[11px] text-stone-200 font-mono flex items-center gap-2 border border-white/10">
+              <span className="text-amber-400 font-bold">*</span>
+              <span>[subdomain].flowerapp.my &rarr; /store/[subdomain]</span>
             </div>
           </div>
         </section>
 
-        {/* Category Filter Pills */}
-        <section className="px-4 py-2">
-          <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pb-1">
-            {categories.map((cat) => {
-              const isActive = selectedCategory === cat;
+        {/* Tenant Florist Directory */}
+        <section className="p-5 pt-3 space-y-4 flex-1">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
+              Explore Tenant Storefronts ({storeList.length})
+            </span>
+            <span className="text-[11px] text-stone-400">
+              Select a store to test
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {storeList.map((store) => {
+              const cleanNumber = store.whatsapp.replace(/\D/g, "");
               return (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
-                    isActive
-                      ? "text-white shadow-2xs"
-                      : "bg-stone-100 text-stone-600 hover:bg-stone-200/80"
-                  }`}
-                  style={
-                    isActive
-                      ? { backgroundColor: floristConfig.brandHexColor }
-                      : undefined
-                  }
+                <div
+                  key={store.id}
+                  className="group relative rounded-3xl border border-stone-200/90 bg-[#FAF9F6] p-4 shadow-xs transition-all duration-300 hover:border-stone-300 hover:shadow-md"
                 >
-                  {cat}
-                </button>
+                  <div className="flex items-start gap-3.5">
+                    {/* Store Logo */}
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xs">
+                      <Image
+                        src={store.logo}
+                        alt={`${store.name} Logo`}
+                        fill
+                        className="object-contain p-1"
+                      />
+                    </div>
+
+                    {/* Store Information */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: store.primaryColor }}
+                        />
+                        <h3 className="truncate text-sm font-bold text-stone-900">
+                          {store.name}
+                        </h3>
+                      </div>
+
+                      <p className="mt-0.5 text-xs text-stone-500 line-clamp-1">
+                        {store.tagline}
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-stone-600">
+                        <span className="font-mono bg-white px-2 py-0.5 rounded-md border border-stone-200 font-semibold">
+                          {store.slug}.flowerapp.my
+                        </span>
+                        <span>•</span>
+                        <span>{store.products.length} Products</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Store Details snippet */}
+                  {store.pickupAddress && (
+                    <div className="mt-3 flex items-center gap-1.5 rounded-xl bg-white/70 px-2.5 py-1.5 text-[11px] text-stone-600 border border-stone-200/60">
+                      <MapPin
+                        className="h-3 w-3 shrink-0"
+                        style={{ color: store.primaryColor }}
+                      />
+                      <span className="truncate">{store.pickupAddress}</span>
+                    </div>
+                  )}
+
+                  {/* Action Link Buttons */}
+                  <div className="mt-3.5 grid grid-cols-2 gap-2">
+                    <Link
+                      href={`/store/${store.slug}`}
+                      className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3 text-xs font-bold text-white shadow-xs transition-all active:scale-98 hover:opacity-95"
+                      style={{ backgroundColor: store.primaryColor }}
+                    >
+                      <span>Visit Catalog</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+
+                    <a
+                      href={`http://${store.slug}.localhost:3000`}
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-stone-200 bg-white py-2.5 px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition-colors"
+                      title="Test local subdomain routing"
+                    >
+                      <span>Test Subdomain</span>
+                      <ExternalLink className="h-3 w-3 text-stone-400" />
+                    </a>
+                  </div>
+                </div>
               );
             })}
           </div>
-        </section>
 
-        {/* Catalog Grid */}
-        <section className="flex-1 px-4 py-2">
-          <div className="flex items-center justify-between pb-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
-              Floral Catalog ({filteredProducts.length})
-            </span>
-            <span className="text-[11px] text-stone-500">
-              Prices in {floristConfig.currency}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {filteredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        </section>
-
-        {/* Store Pickup Notice */}
-        {floristConfig.pickupAddress && (
-          <section className="mx-4 my-3 rounded-2xl border border-stone-200/80 bg-stone-50/80 p-3.5 text-xs">
-            <div className="flex items-start gap-2.5">
-              <MapPin className="h-4 w-4 shrink-0 text-stone-700 mt-0.5" />
-              <div>
-                <p className="font-bold text-stone-900">Boutique Atelier Pickup</p>
-                <p className="mt-0.5 text-stone-600 leading-relaxed text-[11px]">
-                  {floristConfig.pickupAddress}
-                </p>
-              </div>
+          {/* Local Subdomain Testing Instructions */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-stone-900 mb-1.5">
+              <Terminal className="h-4 w-4 text-stone-600" />
+              <span>How to Test Subdomains Locally</span>
             </div>
-          </section>
-        )}
-
-        {/* Footer */}
-        <footer className="mt-auto border-t border-stone-200/80 bg-stone-50 px-4 py-6 text-center">
-          <p className="text-xs font-bold text-stone-800">
-            {floristConfig.storeName}
-          </p>
-          <p className="mt-1 text-[11px] text-stone-500">
-            White-Label Mobile Catalog Template • WhatsApp & TNG Bridge
-          </p>
-          <div className="mt-3 flex items-center justify-center gap-4 text-xs font-medium text-stone-600">
-            <a
-              href={generalInquiryUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 hover:text-stone-900"
-            >
-              <Phone className="h-3 w-3" />
-              <span>+{cleanWhatsappNumber}</span>
-            </a>
+            <p className="text-[11px] text-stone-500 leading-relaxed">
+              Modern browsers resolve <code>*.localhost</code> directly to <code>127.0.0.1</code> without changing your hosts file:
+            </p>
+            <ul className="mt-2 space-y-1 font-mono text-[11px] text-stone-700 bg-stone-50 p-2.5 rounded-xl border border-stone-200/80">
+              <li>&bull; <a href="http://autarix.localhost:3000" className="text-rose-700 underline underline-offset-2">http://autarix.localhost:3000</a></li>
+              <li>&bull; <a href="http://greenland.localhost:3000" className="text-emerald-700 underline underline-offset-2">http://greenland.localhost:3000</a></li>
+            </ul>
           </div>
-        </footer>
+        </section>
 
-        {/* Root Level Mounted Checkout Drawer */}
-        <CheckoutDrawer />
+        {/* Platform Footer */}
+        <footer className="mt-auto border-t border-stone-200/80 bg-stone-50 p-5 text-center">
+          <p className="text-xs font-bold text-stone-800">
+            FlowerApp.my Platform
+          </p>
+          <p className="mt-0.5 text-[11px] text-stone-500">
+            Wildcard Subdomain Multi-Tenant Catalog Architecture
+          </p>
+        </footer>
       </main>
     </div>
   );

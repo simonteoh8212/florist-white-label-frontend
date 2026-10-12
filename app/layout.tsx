@@ -1,10 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { floristConfig } from "@/config/florist.config";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: `${floristConfig.storeName} | Artisanal Floral Studio`,
-  description: `${floristConfig.tagline}. Handcrafted floral arrangements with seamless Touch 'n Go eWallet checkout and WhatsApp confirmation.`,
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_BASE_URL || "https://flowerapp.my"
+  ),
+  title: {
+    default: "FlowerApp.my | Multi-Tenant Florist Platform",
+    template: "%s | FlowerApp.my",
+  },
+  description:
+    "White-label mobile-first florist catalog platform with wildcard subdomain routing, Touch 'n Go checkout proof, and WhatsApp bridge.",
 };
 
 export const viewport: Viewport = {

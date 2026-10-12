@@ -1,0 +1,72 @@
+[
+  {
+    "id": "autarix-01",
+    "name": "Classic Birthday Floral Bouquet",
+    "price": 168,
+    "description": "Vibrant celebratory bouquet crafted with premium fresh blooms, delicate fillers, and festive wrapping.",
+    "image": "/stores/autarix/birthday_bouquet.webp",
+    "category": "Birthday",
+    "tag": "Best Seller"
+  },
+  {
+    "id": "autarix-02",
+    "name": "Chinese Valentine's (七夕) Bouquet",
+    "price": 198,
+    "description": "Romantic crimson and soft blush roses arranged with delicate baby's breath and silk ribbon.",
+    "image": "/stores/autarix/chinese_valentines.webp",
+    "category": "Romance",
+    "tag": "Signature"
+  },
+  {
+    "id": "autarix-03",
+    "name": "Graduation Celebration Bouquet",
+    "price": 158,
+    "description": "Bright sunny blooms and premium sunflowers styled for joyous convocation and graduation ceremonies.",
+    "image": "/stores/autarix/graduation_bouquet.webp",
+    "category": "Graduation",
+    "tag": "Popular"
+  },
+  {
+    "id": "autarix-04",
+    "name": "Ocean Breeze Blue Floral Arrangement",
+    "price": 178,
+    "description": "Enchanting powder blue hydrangeas and pastel accents paired with silver dollar eucalyptus.",
+    "image": "/stores/autarix/blue_flowers.webp",
+    "category": "Bouquets",
+    "tag": "Special"
+  },
+  {
+    "id": "autarix-05",
+    "name": "Sunny Delight Yellow Flower Bouquet",
+    "price": 148,
+    "description": "Uplifting golden sunflowers, chamomile daisies, and fresh garden greenery in artisanal parchment.",
+    "image": "/stores/autarix/yellow_flowers.webp",
+    "category": "Bouquets",
+    "tag": "Classic"
+  },
+  {
+    "id": "autarix-06",
+    "name": "Personalized Balloon & Photo Flower Box",
+    "price": 218,
+    "description": "Customized bubble balloon with polaroid photo prints nestled atop fresh premium flower box.",
+    "image": "/stores/autarix/balloon_and_photos_flowers.webp",
+    "category": "Special Gift",
+    "tag": "Customized"
+  },
+  {
+    "id": "autarix-07",
+    "name": "Get Well Soon Fruit & Flower Basket",
+    "price": 188,
+    "description": "Nourishing fresh fruits accompanied by cheerful garden blooms and a supportive greeting card.",
+    "image": "/stores/autarix/hospital_visit_flowers_and_fruits.webp",
+    "category": "Wellness"
+  },
+  {
+    "id": "autarix-08",
+    "name": "Peaceful Farewell Condolence Flowers",
+    "price": 220,
+    "description": "Graceful white lilies, chrysanthemums, and serene greens crafted into an elegant floral tribute.",
+    "image": "/stores/autarix/condolence_flowers.webp",
+    "category": "Condolence"
+  }
+]

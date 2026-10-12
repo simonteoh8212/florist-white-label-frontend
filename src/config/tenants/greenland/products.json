@@ -1,0 +1,38 @@
+[
+  {
+    "id": "greenland-01",
+    "name": "Cascading Phalaenopsis White Orchid",
+    "price": 228,
+    "description": "Double-stem cascading white Phalaenopsis orchids in handcrafted artisanal ceramic planter with live moss.",
+    "image": "https://images.unsplash.com/photo-1525310072745-f49212b5ac6d?auto=format&fit=crop&w=800&q=80",
+    "category": "Potted",
+    "tag": "Living Luxury"
+  },
+  {
+    "id": "greenland-02",
+    "name": "Wild Botanical Meadow Bouquet",
+    "price": 148,
+    "description": "Vibrant golden sunflowers paired with chamomile daisies, thistle, and fresh silver dollar eucalyptus.",
+    "image": "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?auto=format&fit=crop&w=800&q=80",
+    "category": "Botanicals",
+    "tag": "Eco Friendly"
+  },
+  {
+    "id": "greenland-03",
+    "name": "Monstera Deliciosa Living Planter",
+    "price": 120,
+    "description": "Tropical split-leaf monstera planted in a minimalist textured terrazzo ceramic with drainage saucer.",
+    "image": "https://images.unsplash.com/photo-1614594975525-e45190c55d0b?auto=format&fit=crop&w=800&q=80",
+    "category": "Living Plants",
+    "tag": "Air Purifying"
+  },
+  {
+    "id": "greenland-04",
+    "name": "Olive Branch & Casablanca Lily Vase",
+    "price": 175,
+    "description": "Fragrant Casablanca lilies arranged with Tuscan olive branches and eucalyptus in a frosted glass cylinder vase.",
+    "image": "https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=800&q=80",
+    "category": "Vase Arrangements",
+    "tag": "Signature"
+  }
+]

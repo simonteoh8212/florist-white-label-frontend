@@ -1,10 +1,22 @@
-import { floristConfig } from "@/config/florist.config";
+import { StoreConfig, STORES } from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
+
+/**
+ * Resolves the active store configuration.
+ */
+function resolveStore(providedStore?: StoreConfig): StoreConfig {
+  if (providedStore) return providedStore;
+  const storeFromCart = useCartStore.getState().currentStore;
+  if (storeFromCart) return storeFromCart;
+  // Default fallback
+  return STORES.autarix;
+}
 
 /**
  * Generates a formatted order summary text message for WhatsApp.
  */
-export function generateWhatsAppMessage(): string {
+export function generateWhatsAppMessage(storeOverride?: StoreConfig): string {
+  const store = resolveStore(storeOverride);
   const {
     selectedProduct,
     fulfillmentMethod,
@@ -15,13 +27,14 @@ export function generateWhatsAppMessage(): string {
 
   const isDelivery = fulfillmentMethod === "delivery";
   const fulfillmentLabel = isDelivery ? "Home Delivery 🚚" : "Store Self-Pickup 🏬";
+  const currency = store.currency || "RM";
 
   const messageLines = [
-    `🌸 *NEW ORDER - ${floristConfig.storeName.toUpperCase()}* 🌸`,
+    `🌸 *NEW ORDER - ${store.name.toUpperCase()}* 🌸`,
     ``,
     `💐 *ORDERED ITEM:*`,
     `• Product: ${selectedProduct ? selectedProduct.name : "Floral Arrangement"}`,
-    `• Amount: ${floristConfig.currency} ${selectedProduct ? selectedProduct.price.toFixed(2) : "0.00"}`,
+    `• Amount: ${currency} ${selectedProduct ? selectedProduct.price.toFixed(2) : "0.00"}`,
     ``,
     `📅 *FULFILLMENT DETAILS:*`,
     `• Method: ${fulfillmentLabel}`,
@@ -30,13 +43,13 @@ export function generateWhatsAppMessage(): string {
     ``,
     `👤 *CUSTOMER DETAILS:*`,
     `• Name: ${customerDetails.name || "N/A"}`,
-    `• Phone: ${customerDetails.phone || "N/A"}`,
+    `• Contact: ${customerDetails.phone || "N/A"}`,
   ];
 
   if (isDelivery) {
     messageLines.push(`• Delivery Address: ${customerDetails.deliveryAddress || "N/A"}`);
-  } else if (floristConfig.pickupAddress) {
-    messageLines.push(`• Pickup Location: ${floristConfig.pickupAddress}`);
+  } else if (store.pickupAddress) {
+    messageLines.push(`• Pickup Location: ${store.pickupAddress}`);
   }
 
   if (customerDetails.cardMessage && customerDetails.cardMessage.trim()) {
@@ -44,40 +57,40 @@ export function generateWhatsAppMessage(): string {
   }
 
   if (customerDetails.notes && customerDetails.notes.trim()) {
-    messageLines.push(`• Special Notes: ${customerDetails.notes.trim()}`);
+    messageLines.push(`• Customer Notes: ${customerDetails.notes.trim()}`);
   }
 
   messageLines.push(
     ``,
-    `💳 *PAYMENT CONFIRMATION:*`,
-    `• Method: Touch 'n Go (TNG) eWallet`,
-    `• Account: ${floristConfig.tngAccountName || floristConfig.storeName}`,
-    `• Status: Paid via TNG QR (Payment proof screenshot attached below 📸)`,
+    `💳 *PAYMENT METHOD:*`,
+    `• Touch 'n Go (TNG) eWallet`,
+    `• Account: ${store.tngAccountName || store.name}`,
+    `• Status: Paid via TNG (Payment proof screenshot attached below 📸)`,
     ``,
-    `✨ _Thank you for ordering with ${floristConfig.storeName}!_`
+    `✨ _Thank you for ordering with ${store.name}!_`
   );
 
   return messageLines.join("\n");
 }
 
 /**
- * Constructs the WhatsApp direct link.
+ * Constructs the dynamic WhatsApp URL string based on the tenant store's WhatsApp number.
  */
-export function getWhatsAppUrl(): string {
-  const cleanNumber = floristConfig.whatsappNumber.replace(/\D/g, "");
-  const text = generateWhatsAppMessage();
+export function getWhatsAppUrl(storeOverride?: StoreConfig): string {
+  const store = resolveStore(storeOverride);
+  const digits = store.whatsapp.replace(/\D/g, "");
+  const cleanNumber = digits.startsWith("0") ? `6${digits}` : digits;
+  const text = generateWhatsAppMessage(store);
   return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(text)}`;
 }
 
 /**
- * Triggers browser redirection to WhatsApp with pre-filled order data.
+ * Triggers browser redirection to WhatsApp with pre-filled tenant order data.
  */
-export function sendOrderViaWhatsApp(): void {
-  const url = getWhatsAppUrl();
+export function sendOrderViaWhatsApp(storeOverride?: StoreConfig): void {
+  const url = getWhatsAppUrl(storeOverride);
 
-  // On mobile devices, assigning directly to window.location or opening new tab
   if (typeof window !== "undefined") {
-    // Attempt opening in a new tab first; if popup blocker prevents it, fallback to window.location
     const newWindow = window.open(url, "_blank");
     if (!newWindow || newWindow.closed || typeof newWindow.closed === "undefined") {
       window.location.href = url;

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { floristConfig } from "@/config/florist.config";
+import { StoreConfig, STORES } from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
 import { sendOrderViaWhatsApp } from "@/utils/whatsapp";
 import {
@@ -18,16 +18,24 @@ import {
   Sparkles,
 } from "lucide-react";
 
-export const TngPaymentView: React.FC = () => {
+interface TngPaymentViewProps {
+  store?: StoreConfig;
+}
+
+export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp }) => {
+  const currentStore = useCartStore((state) => state.currentStore);
+  const store = storeProp || currentStore || STORES.autarix;
+
   const selectedProduct = useCartStore((state) => state.selectedProduct);
   const setCheckoutStep = useCartStore((state) => state.setCheckoutStep);
 
   const [hasCopiedAmount, setHasCopiedAmount] = useState(false);
   const [hasLaunchedApp, setHasLaunchedApp] = useState(false);
 
+  const currency = store.currency || "RM";
   const priceFormatted = selectedProduct
-    ? `${floristConfig.currency} ${selectedProduct.price.toFixed(2)}`
-    : `${floristConfig.currency} 0.00`;
+    ? `${currency} ${selectedProduct.price.toFixed(2)}`
+    : `${currency} 0.00`;
 
   const copyAmountToClipboard = () => {
     if (selectedProduct) {
@@ -46,8 +54,7 @@ export const TngPaymentView: React.FC = () => {
     setHasLaunchedApp(true);
 
     if (typeof window !== "undefined") {
-      const deepLink = floristConfig.tngDeepLink || "tngewallet://";
-      // Trigger deep link to open Touch 'n Go eWallet app
+      const deepLink = store.tngDeepLink || "tngewallet://";
       window.location.href = deepLink;
     }
   };
@@ -56,18 +63,19 @@ export const TngPaymentView: React.FC = () => {
    * For Gateway mode: Redirects customer to dynamic merchant checkout
    */
   const handleProceedGateway = () => {
-    if (typeof window !== "undefined" && floristConfig.gatewayCheckoutUrl) {
+    if (typeof window !== "undefined" && store.gatewayCheckoutUrl) {
       const returnUrl = encodeURIComponent(`${window.location.origin}/checkout/success`);
-      const checkoutUrl = `${floristConfig.gatewayCheckoutUrl}?amount=${selectedProduct?.price || 0}&redirect_url=${returnUrl}`;
+      const checkoutUrl = `${store.gatewayCheckoutUrl}?amount=${selectedProduct?.price || 0}&redirect_url=${returnUrl}`;
       window.location.href = checkoutUrl;
     }
   };
 
   const handleConfirmWhatsApp = () => {
-    sendOrderViaWhatsApp();
+    sendOrderViaWhatsApp(store);
   };
 
-  const isGatewayMode = floristConfig.paymentMode === "gateway";
+  const isGatewayMode = store.paymentMode === "gateway";
+  const tngQrUrl = store.tngQrUrl || "/stores/autarix/tng-qr.svg";
 
   return (
     <div className="flex flex-col space-y-4 pb-6">
@@ -151,7 +159,7 @@ export const TngPaymentView: React.FC = () => {
               Touch &apos;n Go Automated Gateway
             </h3>
             <p className="mt-1 text-xs text-stone-600 leading-relaxed">
-              You will be redirected directly to the Touch &apos;n Go checkout. Once verified, you will automatically return here.
+              You will be redirected directly to the Touch &apos;n Go checkout for {store.name}.
             </p>
           </div>
 
@@ -210,8 +218,8 @@ export const TngPaymentView: React.FC = () => {
             <div className="relative h-48 w-48 overflow-hidden rounded-2xl border-2 border-stone-100 bg-stone-50 p-2 shadow-inner">
               <div className="relative h-full w-full rounded-xl overflow-hidden bg-white">
                 <Image
-                  src={floristConfig.tngQrUrl}
-                  alt="Touch 'n Go eWallet Payment QR Code"
+                  src={tngQrUrl}
+                  alt={`${store.name} Touch 'n Go eWallet QR`}
                   fill
                   className="object-contain"
                   priority
@@ -220,11 +228,11 @@ export const TngPaymentView: React.FC = () => {
             </div>
 
             <p className="mt-2.5 text-center text-[11px] text-stone-500">
-              Account: <span className="font-bold text-stone-800">{floristConfig.tngAccountName || floristConfig.storeName}</span>
+              Account: <span className="font-bold text-stone-800">{store.tngAccountName || store.name}</span>
             </p>
 
             <a
-              href={floristConfig.tngQrUrl}
+              href={tngQrUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-stone-600 hover:text-stone-900 underline underline-offset-2"

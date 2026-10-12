@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <rect width="120" height="120" rx="60" fill="#BE185D" />
+  <circle cx="60" cy="60" r="48" fill="none" stroke="#FDF2F8" stroke-width="2" stroke-dasharray="4 4" />
+  <g fill="#FFFFFF" transform="translate(60,60)">
+    <!-- Stylized Rose Petals -->
+    <path d="M0 -30 C15 -30 25 -15 25 0 C25 20 0 35 0 35 C0 35 -25 20 -25 0 C-25 -15 -15 -30 0 -30 Z" opacity="0.95" />
+    <path d="M-15 -10 C-5 -25 15 -20 20 -5 C25 10 10 25 0 28 C-10 25 -25 10 -15 -10 Z" fill="#FDF2F8" opacity="0.9" />
+    <circle cx="0" cy="0" r="7" fill="#BE185D" />
+  </g>
+  <text x="60" y="105" font-family="serif" font-size="9" font-weight="bold" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">AUTARIX</text>
+</svg>

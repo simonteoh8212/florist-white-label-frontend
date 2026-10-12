@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Product } from "@/config/florist.config";
+import { Product, StoreConfig } from "@/config/stores";
 
 export type FulfillmentMethod = "delivery" | "pickup";
 
@@ -12,6 +12,10 @@ export interface CustomerDetails {
 }
 
 export interface CartState {
+  // Tenant identification
+  currentStoreSlug: string | null;
+  currentStore: StoreConfig | null;
+
   // Product state
   selectedProduct: Product | null;
 
@@ -28,6 +32,7 @@ export interface CartState {
   checkoutStep: 1 | 2;
 
   // Actions
+  syncTenantStore: (store: StoreConfig) => void;
   setSelectedProduct: (product: Product | null) => void;
   setFulfillmentMethod: (method: FulfillmentMethod) => void;
   setSelectedDate: (date: string) => void;
@@ -35,7 +40,7 @@ export interface CartState {
   setCustomerDetails: (details: Partial<CustomerDetails>) => void;
   setCheckoutDrawerOpen: (isOpen: boolean) => void;
   setCheckoutStep: (step: 1 | 2) => void;
-  openCheckoutWithProduct: (product: Product) => void;
+  openCheckoutWithProduct: (product: Product, store?: StoreConfig) => void;
   resetCheckout: () => void;
 }
 
@@ -48,6 +53,9 @@ const initialCustomerDetails: CustomerDetails = {
 };
 
 export const useCartStore = create<CartState>((set) => ({
+  currentStoreSlug: null,
+  currentStore: null,
+
   selectedProduct: null,
   fulfillmentMethod: "delivery",
   selectedDate: "",
@@ -55,6 +63,25 @@ export const useCartStore = create<CartState>((set) => ({
   customerDetails: initialCustomerDetails,
   isCheckoutDrawerOpen: false,
   checkoutStep: 1,
+
+  // Synchronizes tenant store and resets state if tenant changes
+  syncTenantStore: (store: StoreConfig) =>
+    set((state) => {
+      if (state.currentStoreSlug !== store.slug) {
+        return {
+          currentStoreSlug: store.slug,
+          currentStore: store,
+          selectedProduct: null,
+          fulfillmentMethod: "delivery",
+          selectedDate: "",
+          selectedTime: "",
+          customerDetails: initialCustomerDetails,
+          isCheckoutDrawerOpen: false,
+          checkoutStep: 1,
+        };
+      }
+      return { currentStore: store };
+    }),
 
   setSelectedProduct: (product) => set({ selectedProduct: product }),
 
@@ -75,17 +102,33 @@ export const useCartStore = create<CartState>((set) => ({
   setCheckoutDrawerOpen: (isOpen) =>
     set((state) => ({
       isCheckoutDrawerOpen: isOpen,
-      // Reset to step 1 when drawer is closed
       checkoutStep: isOpen ? state.checkoutStep : 1,
     })),
 
   setCheckoutStep: (checkoutStep) => set({ checkoutStep }),
 
-  openCheckoutWithProduct: (product) =>
-    set({
-      selectedProduct: product,
-      isCheckoutDrawerOpen: true,
-      checkoutStep: 1,
+  openCheckoutWithProduct: (product, store) =>
+    set((state) => {
+      // If store is passed and different from currentStoreSlug, reset tenant data
+      if (store && state.currentStoreSlug !== store.slug) {
+        return {
+          currentStoreSlug: store.slug,
+          currentStore: store,
+          selectedProduct: product,
+          fulfillmentMethod: "delivery",
+          selectedDate: "",
+          selectedTime: "",
+          customerDetails: initialCustomerDetails,
+          isCheckoutDrawerOpen: true,
+          checkoutStep: 1,
+        };
+      }
+      return {
+        selectedProduct: product,
+        ...(store ? { currentStore: store, currentStoreSlug: store.slug } : {}),
+        isCheckoutDrawerOpen: true,
+        checkoutStep: 1,
+      };
     }),
 
   resetCheckout: () =>
