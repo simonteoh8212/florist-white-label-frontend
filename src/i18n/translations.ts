@@ -50,6 +50,7 @@ export const translations = {
     poweredBy: "Powered by flowerapp.my • Platform Provider",
     footerDisclaimer:
       "All orders, payments, fulfillment, and inquiries are handled directly by {store}.",
+    scrollTop: "Scroll to top",
 
     // Product Card & Modal
     orderNow: "Order Now",
@@ -71,7 +72,7 @@ export const translations = {
     qty: "Qty: 1",
     storePickupAddress: "{store} Pickup Address:",
     maps: "Maps ↗",
-    fulfillmentDate: "Fulfillment Date",
+    fulfillmentDate: "Delivery / Pickup Date",
     today: "Today",
     todayClosed: "Today (Closed)",
     tomorrow: "Tomorrow",
@@ -104,7 +105,7 @@ export const translations = {
     // Checkout Drawer - Validation
     validationName: "Please enter your name.",
     validationPhone: "Please enter your WhatsApp contact number.",
-    validationDate: "Please pick a fulfillment date.",
+    validationDate: "Please pick a delivery/pickup date.",
     validationExactTime: "Please specify your preferred exact delivery time.",
     validationExactTimeAdvance:
       "Same-day orders require at least {hours}h advance notice (from {time} onwards).",
@@ -250,6 +251,7 @@ export const translations = {
     poweredBy: "技术支持：flowerapp.my • 软件平台服务商",
     footerDisclaimer:
       "所有花艺商品、款项交易、配送派发及售后咨询均由 {store} 直接负责与处理。",
+    scrollTop: "回到顶部",
 
     // Product Card & Modal
     orderNow: "立即订购",
@@ -271,7 +273,7 @@ export const translations = {
     qty: "数量: 1",
     storePickupAddress: "{store} 自取地址：",
     maps: "导航 ↗",
-    fulfillmentDate: "履约日期",
+    fulfillmentDate: "配送 / 自取日期",
     today: "今天",
     todayClosed: "今天（已截止）",
     tomorrow: "明天",
@@ -304,7 +306,7 @@ export const translations = {
     // Checkout Drawer - Validation
     validationName: "请填写您的姓名。",
     validationPhone: "请填写 WhatsApp 联络电话。",
-    validationDate: "请选择履约日期。",
+    validationDate: "请选择配送或自取日期。",
     validationExactTime: "请指定期望送达时间。",
     validationExactTimeAdvance:
       "当日订单需至少提前 {hours} 小时预约（最早从 {time} 开始）。",
