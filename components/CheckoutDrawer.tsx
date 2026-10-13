@@ -75,6 +75,39 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
   const [showProductImageModal, setShowProductImageModal] = useState(false);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
 
+  // iOS Safari / Chrome autofill & keyboard collapse recovery
+  useEffect(() => {
+    if (!isCheckoutDrawerOpen) return;
+
+    const resetDrawerStyleOverrides = () => {
+      const drawerEl = document.querySelector<HTMLElement>("[data-vaul-drawer]");
+      if (!drawerEl) return;
+      if (drawerEl.style.height) {
+        drawerEl.style.removeProperty("height");
+      }
+      if (drawerEl.style.bottom) {
+        drawerEl.style.removeProperty("bottom");
+      }
+    };
+
+    const handleViewportOrFocusRecovery = () => {
+      const vv = window.visualViewport;
+      // When keyboard is dismissed or closing (visualViewport expands back near window.innerHeight)
+      if (!vv || Math.abs(window.innerHeight - vv.height) < 150) {
+        resetDrawerStyleOverrides();
+      }
+    };
+
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", handleViewportOrFocusRecovery);
+    window.addEventListener("focusout", handleViewportOrFocusRecovery);
+
+    return () => {
+      vv?.removeEventListener("resize", handleViewportOrFocusRecovery);
+      window.removeEventListener("focusout", handleViewportOrFocusRecovery);
+    };
+  }, [isCheckoutDrawerOpen]);
+
   const primaryColor = store.primaryColor || "#BE185D";
   const currency = store.currency || "RM";
 
@@ -311,10 +344,11 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
     <Drawer
       open={isCheckoutDrawerOpen}
       onOpenChange={setCheckoutDrawerOpen}
+      repositionInputs={false}
     >
-      <DrawerContent className="max-w-md mx-auto overflow-hidden bg-[#FAF9F6] border-t border-stone-200">
+      <DrawerContent className="max-w-md mx-auto overflow-hidden bg-[#FAF9F6] border-t border-stone-200 flex flex-col h-[88vh] h-[88svh] max-h-[88vh] max-h-[88svh]">
         {/* Drawer Header */}
-        <DrawerHeader className="relative border-b border-stone-200/60 bg-white/60 px-5 pt-3 pb-3">
+        <DrawerHeader className="relative border-b border-stone-200/60 bg-white/60 px-5 pt-3 pb-3 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span
@@ -349,7 +383,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
         </DrawerHeader>
 
         {/* Scrollable Body */}
-        <div className="max-h-[78vh] overflow-y-auto px-5 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4">
           {checkoutStep === 1 ? (
             <form onSubmit={handleProceedToPayment} className="space-y-4 pb-6">
               {/* Selected Product Strip */}
@@ -524,7 +558,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                       required
-                      className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                      className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -581,7 +615,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                           value={exactTimeInput}
                           onChange={(e) => handleExactTimeChange(e.target.value)}
                           required
-                          className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                          className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                         />
                       </div>
 
@@ -694,39 +728,45 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
 
                 {/* Name */}
                 <div className="relative">
-                  <User className="absolute top-2.5 left-3 h-4 w-4 text-stone-400" />
+                  <User className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
                   <input
                     type="text"
+                    name="name"
+                    autoComplete="name"
                     placeholder={t("recipientNamePlaceholder")}
                     value={customerDetails.name}
                     onChange={(e) =>
                       setCustomerDetails({ name: e.target.value })
                     }
                     required
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                   />
                 </div>
 
                 {/* Phone */}
                 <div className="relative">
-                  <Phone className="absolute top-2.5 left-3 h-4 w-4 text-stone-400" />
+                  <Phone className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
                   <input
                     type="tel"
+                    name="tel"
+                    autoComplete="tel"
                     placeholder={t("phonePlaceholder")}
                     value={customerDetails.phone}
                     onChange={(e) =>
                       setCustomerDetails({ phone: e.target.value })
                     }
                     required
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                   />
                 </div>
 
                 {/* Delivery Address (only when Delivery is selected) */}
                 {fulfillmentMethod === "delivery" && (
                   <div className="relative">
-                    <MapPin className="absolute top-2.5 left-3 h-4 w-4 text-stone-400" />
+                    <MapPin className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
                     <textarea
+                      name="street-address"
+                      autoComplete="street-address"
                       placeholder={t("addressPlaceholder")}
                       rows={2}
                       value={customerDetails.deliveryAddress}
@@ -734,14 +774,14 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                         setCustomerDetails({ deliveryAddress: e.target.value })
                       }
                       required
-                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
                     />
                   </div>
                 )}
 
                 {/* Complimentary Card Message */}
                 <div className="relative">
-                  <Heart className="absolute top-2.5 left-3 h-4 w-4 text-stone-400" />
+                  <Heart className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
                   <textarea
                     placeholder={t("cardMessagePlaceholder")}
                     rows={2}
@@ -749,7 +789,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                     onChange={(e) =>
                       setCustomerDetails({ cardMessage: e.target.value })
                     }
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
                   />
                 </div>
               </div>

@@ -6,10 +6,12 @@ import { cn } from "@/lib/utils";
 
 const Drawer = ({
   shouldScaleBackground = true,
+  repositionInputs = false,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
   <DrawerPrimitive.Root
     shouldScaleBackground={shouldScaleBackground}
+    repositionInputs={repositionInputs}
     {...props}
   />
 );
@@ -43,13 +45,13 @@ const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 flex h-auto max-h-[92vh] flex-col rounded-t-[28px] border-t border-stone-200/80 bg-[#FCFBFA] text-stone-900 shadow-2xl focus:outline-none",
+        "fixed inset-x-0 bottom-0 z-50 flex h-[88vh] h-[88svh] max-h-[88vh] max-h-[88svh] flex-col rounded-t-[28px] border-t border-stone-200/80 bg-[#FCFBFA] text-stone-900 shadow-2xl focus:outline-none",
         className
       )}
       {...props}
     >
       {/* Drawer Grabber Bar */}
-      <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-stone-300" />
+      <div className="mx-auto mt-3 h-1.5 w-12 shrink-0 rounded-full bg-stone-300" />
       {children}
     </DrawerPrimitive.Content>
   </DrawerPortal>
@@ -61,7 +63,7 @@ const DrawerHeader = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn("grid gap-1 px-5 pt-3 pb-3 text-left", className)}
+    className={cn("grid gap-1 px-5 pt-3 pb-3 text-left shrink-0", className)}
     {...props}
   />
 );
