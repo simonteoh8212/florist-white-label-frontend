@@ -558,7 +558,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                       required
-                      className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                      className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -615,7 +615,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                           value={exactTimeInput}
                           onChange={(e) => handleExactTimeChange(e.target.value)}
                           required
-                          className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                          className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                         />
                       </div>
 
@@ -739,7 +739,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                       setCustomerDetails({ name: e.target.value })
                     }
                     required
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                   />
                 </div>
 
@@ -756,7 +756,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                       setCustomerDetails({ phone: e.target.value })
                     }
                     required
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                   />
                 </div>
 
@@ -774,7 +774,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                         setCustomerDetails({ deliveryAddress: e.target.value })
                       }
                       required
-                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
+                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
                     />
                   </div>
                 )}
@@ -789,7 +789,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({ store: storeProp
                     onChange={(e) =>
                       setCustomerDetails({ cardMessage: e.target.value })
                     }
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
+                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
                   />
                 </div>
               </div>
