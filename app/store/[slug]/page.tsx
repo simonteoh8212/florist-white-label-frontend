@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getStoreBySlug, getAllStoreSlugs } from "@/config/stores";
 import { StorefrontClient } from "@/components/StorefrontClient";
+import { getStoreEmergencyStatus } from "@/lib/storeStatus";
 
 interface StorePageProps {
   params: Promise<{
@@ -79,5 +80,7 @@ export default async function StorePage({ params }: StorePageProps) {
     notFound();
   }
 
-  return <StorefrontClient store={store} />;
+  const initialStatus = await getStoreEmergencyStatus(store.slug);
+
+  return <StorefrontClient store={store} initialStatus={initialStatus} />;
 }

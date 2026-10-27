@@ -1,0 +1,11 @@
+{
+  "autarix": {
+    "storeSlug": "autarix",
+    "isTodayPaused": true,
+    "pausedDate": "2026-10-26",
+    "isTomorrowBlocked": false,
+    "blockedDate": "2026-10-27",
+    "emergencyNotice": "",
+    "updatedAt": "2026-10-26T03:53:29.759Z"
+  }
+}

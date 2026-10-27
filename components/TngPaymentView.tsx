@@ -2,17 +2,28 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { StoreConfig, STORES, getProductLocalized } from "@/config/stores";
+import {
+  StoreConfig,
+  STORES,
+  getProductLocalized,
+  HolidayPricingDisplayMode,
+} from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
 import { sendOrderViaWhatsApp } from "@/utils/whatsapp";
 import { useTranslation } from "@/i18n/localeStore";
+import {
+  getHolidayRuleForDate,
+  calculateHolidaySurcharge,
+  isHolidayPricingInclusive,
+  getEffectiveProductPrice,
+  getHolidayLineItemSurcharge,
+} from "@/lib/holidayPricing";
 import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Copy,
   ExternalLink,
-  MessageCircle,
   QrCode,
   ShieldCheck,
   Smartphone,
@@ -21,14 +32,23 @@ import {
 
 interface TngPaymentViewProps {
   store?: StoreConfig;
+  pricingDisplayMode?: HolidayPricingDisplayMode;
 }
 
-export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp }) => {
+export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
+  store: storeProp,
+  pricingDisplayMode,
+}) => {
   const currentStore = useCartStore((state) => state.currentStore);
   const store = storeProp || currentStore || STORES.autarix;
   const { t, locale } = useTranslation();
 
   const selectedProduct = useCartStore((state) => state.selectedProduct);
+  const selectedAddonIds = useCartStore((state) => state.selectedAddonIds);
+  const fulfillmentMethod = useCartStore((state) => state.fulfillmentMethod);
+  const selectedDeliveryZoneId = useCartStore((state) => state.selectedDeliveryZoneId);
+  const selectedDate = useCartStore((state) => state.selectedDate);
+
   const selectedLocalized = selectedProduct
     ? getProductLocalized(selectedProduct, locale)
     : null;
@@ -38,16 +58,57 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
   const [hasLaunchedApp, setHasLaunchedApp] = useState(false);
 
   const currency = store.currency || "RM";
-  const priceFormatted = selectedProduct
-    ? `${currency} ${selectedProduct.price.toFixed(2)}`
-    : `${currency} 0.00`;
+  const baseProductPrice = selectedProduct?.price || 0;
+
+  // Holiday surcharge & pricing display mode
+  const holidayRule = getHolidayRuleForDate(store, selectedDate);
+  const isHolidayInclusive = Boolean(
+    holidayRule && isHolidayPricingInclusive(holidayRule, pricingDisplayMode)
+  );
+  const effectiveProductPrice = getEffectiveProductPrice(
+    baseProductPrice,
+    holidayRule,
+    pricingDisplayMode
+  );
+  const holidayLineItemSurcharge = getHolidayLineItemSurcharge(
+    baseProductPrice,
+    holidayRule,
+    pricingDisplayMode
+  );
+
+  // Active Add-ons
+  const availableAddons = store.addons || [];
+  const activeAddons = availableAddons.filter((a) =>
+    selectedAddonIds.includes(a.id)
+  );
+  const addonsTotal = activeAddons.reduce((sum, a) => sum + a.price, 0);
+
+  // Delivery Fee
+  const isDelivery = fulfillmentMethod === "delivery";
+  const deliveryConfig = store.deliveryFeeConfig;
+  const isDeliveryFeeEnabled = Boolean(isDelivery && deliveryConfig?.enabled);
+  const selectedZone = isDeliveryFeeEnabled
+    ? deliveryConfig?.zones.find((z) => z.id === selectedDeliveryZoneId)
+    : null;
+  const baseDeliveryFee = selectedZone?.fee || 0;
+  const isFreeDelivery = Boolean(
+    isDeliveryFeeEnabled &&
+      deliveryConfig?.freeDeliveryThreshold &&
+      effectiveProductPrice + addonsTotal >= deliveryConfig.freeDeliveryThreshold
+  );
+  const deliveryFee = isDeliveryFeeEnabled
+    ? isFreeDelivery
+      ? 0
+      : baseDeliveryFee
+    : 0;
+
+  const grandTotal = effectiveProductPrice + addonsTotal + deliveryFee + holidayLineItemSurcharge;
+  const priceFormatted = `${currency} ${grandTotal.toFixed(2)}`;
 
   const copyAmountToClipboard = () => {
-    if (selectedProduct) {
-      navigator.clipboard?.writeText(selectedProduct.price.toFixed(2));
-      setHasCopiedAmount(true);
-      setTimeout(() => setHasCopiedAmount(false), 2500);
-    }
+    navigator.clipboard?.writeText(grandTotal.toFixed(2));
+    setHasCopiedAmount(true);
+    setTimeout(() => setHasCopiedAmount(false), 2500);
   };
 
   /**
@@ -70,13 +131,13 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
   const handleProceedGateway = () => {
     if (typeof window !== "undefined" && store.gatewayCheckoutUrl) {
       const returnUrl = encodeURIComponent(`${window.location.origin}/checkout/success`);
-      const checkoutUrl = `${store.gatewayCheckoutUrl}?amount=${selectedProduct?.price || 0}&redirect_url=${returnUrl}`;
+      const checkoutUrl = `${store.gatewayCheckoutUrl}?amount=${grandTotal.toFixed(2)}&redirect_url=${returnUrl}`;
       window.location.href = checkoutUrl;
     }
   };
 
   const handleConfirmWhatsApp = () => {
-    sendOrderViaWhatsApp(store);
+    sendOrderViaWhatsApp(store, pricingDisplayMode);
   };
 
   const isGatewayMode = store.paymentMode === "gateway";
@@ -135,14 +196,67 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
           </button>
         </div>
 
-        {selectedProduct && (
-          <div className="mt-3 flex items-center gap-2 border-t border-stone-100 pt-2.5 text-xs text-stone-600">
-            <span className="font-semibold text-stone-900">{t("arrangement")}</span>
-            <span className="truncate font-medium">
-              {selectedLocalized?.name || selectedProduct.name}
-            </span>
-          </div>
-        )}
+        {/* Itemized breakdown */}
+        <div className="mt-3 space-y-1.5 border-t border-stone-100 pt-2.5 text-xs text-stone-600">
+          {selectedProduct && (
+            <div className="flex items-center justify-between">
+              <span className="truncate font-medium text-stone-700 flex items-center gap-1.5">
+                <span>{selectedLocalized?.name || selectedProduct.name}</span>
+                {isHolidayInclusive && (
+                  <span className="text-[9px] font-semibold text-rose-700 bg-rose-50 px-1 py-0.2 rounded border border-rose-200">
+                    {t("holidayInclusiveBadge")}
+                  </span>
+                )}
+              </span>
+              <span className="font-semibold text-stone-900 shrink-0">
+                {currency} {effectiveProductPrice.toFixed(2)}
+              </span>
+            </div>
+          )}
+
+          {activeAddons.map((addon) => (
+            <div
+              key={addon.id}
+              className="flex items-center justify-between text-[11px] text-stone-500"
+            >
+              <span className="truncate">
+                + {locale === "zh" ? addon.nameZh || addon.name : addon.name}
+              </span>
+              <span className="font-medium shrink-0">
+                +{currency} {addon.price.toFixed(2)}
+              </span>
+            </div>
+          ))}
+
+          {isDelivery && isDeliveryFeeEnabled && (
+            <div className="flex items-center justify-between text-[11px] text-stone-500">
+              <span className="truncate">
+                {selectedZone
+                  ? locale === "zh"
+                    ? selectedZone.nameZh || selectedZone.name
+                    : selectedZone.name
+                  : t("deliveryFee")}
+              </span>
+              <span className="font-medium shrink-0">
+                {isFreeDelivery
+                  ? t("freeDeliveryApplied")
+                  : `+${currency} ${deliveryFee.toFixed(2)}`}
+              </span>
+            </div>
+          )}
+
+          {holidayLineItemSurcharge > 0 && holidayRule && !isHolidayInclusive && (
+            <div className="flex items-center justify-between text-[11px] text-rose-700">
+              <span className="truncate font-medium">
+                + {locale === "zh" ? holidayRule.nameZh || holidayRule.name : holidayRule.name}
+                {holidayRule.surchargeType === "percentage" ? ` (+${holidayRule.surchargeAmount}%)` : ""}
+              </span>
+              <span className="font-medium shrink-0">
+                +{currency} {holidayLineItemSurcharge.toFixed(2)}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Copy Notification Toast Banner */}
@@ -270,7 +384,14 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({ store: storeProp
               onClick={handleConfirmWhatsApp}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3.5 px-4 text-sm font-bold text-white shadow-md shadow-emerald-500/20 transition-all duration-200 hover:bg-[#20ba59] active:scale-98 cursor-pointer"
             >
-              <MessageCircle className="h-5 w-5 fill-white text-[#25D366]" />
+              <Image
+                src="/icons/whatsapp.svg"
+                alt="WhatsApp"
+                width={20}
+                height={20}
+                className="h-5 w-5 brightness-0 invert shrink-0"
+                unoptimized
+              />
               <span>{t("confirmSendWhatsapp")}</span>
             </button>
 

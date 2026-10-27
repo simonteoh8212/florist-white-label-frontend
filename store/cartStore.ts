@@ -19,8 +19,12 @@ export interface CartState {
   // Product state
   selectedProduct: Product | null;
 
+  // Gift Add-ons state
+  selectedAddonIds: string[];
+
   // Fulfillment state
   fulfillmentMethod: FulfillmentMethod;
+  selectedDeliveryZoneId: string | null;
   selectedDate: string;
   selectedTime: string;
 
@@ -34,7 +38,10 @@ export interface CartState {
   // Actions
   syncTenantStore: (store: StoreConfig) => void;
   setSelectedProduct: (product: Product | null) => void;
+  toggleAddon: (addonId: string) => void;
+  setSelectedAddonIds: (addonIds: string[]) => void;
   setFulfillmentMethod: (method: FulfillmentMethod) => void;
+  setSelectedDeliveryZoneId: (zoneId: string | null) => void;
   setSelectedDate: (date: string) => void;
   setSelectedTime: (time: string) => void;
   setCustomerDetails: (details: Partial<CustomerDetails>) => void;
@@ -57,7 +64,9 @@ export const useCartStore = create<CartState>((set) => ({
   currentStore: null,
 
   selectedProduct: null,
+  selectedAddonIds: [],
   fulfillmentMethod: "delivery",
+  selectedDeliveryZoneId: null,
   selectedDate: "",
   selectedTime: "",
   customerDetails: initialCustomerDetails,
@@ -67,12 +76,18 @@ export const useCartStore = create<CartState>((set) => ({
   // Synchronizes tenant store and resets state if tenant changes
   syncTenantStore: (store: StoreConfig) =>
     set((state) => {
+      const defaultZone =
+        store.deliveryFeeConfig?.defaultZoneId ||
+        store.deliveryFeeConfig?.zones?.[0]?.id ||
+        null;
       if (state.currentStoreSlug !== store.slug) {
         return {
           currentStoreSlug: store.slug,
           currentStore: store,
           selectedProduct: null,
+          selectedAddonIds: [],
           fulfillmentMethod: "delivery",
+          selectedDeliveryZoneId: defaultZone,
           selectedDate: "",
           selectedTime: "",
           customerDetails: initialCustomerDetails,
@@ -80,12 +95,27 @@ export const useCartStore = create<CartState>((set) => ({
           checkoutStep: 1,
         };
       }
-      return { currentStore: store };
+      return {
+        currentStore: store,
+        selectedDeliveryZoneId: state.selectedDeliveryZoneId || defaultZone,
+      };
     }),
 
   setSelectedProduct: (product) => set({ selectedProduct: product }),
 
+  toggleAddon: (addonId: string) =>
+    set((state) => ({
+      selectedAddonIds: state.selectedAddonIds.includes(addonId)
+        ? state.selectedAddonIds.filter((id) => id !== addonId)
+        : [...state.selectedAddonIds, addonId],
+    })),
+
+  setSelectedAddonIds: (selectedAddonIds: string[]) => set({ selectedAddonIds }),
+
   setFulfillmentMethod: (fulfillmentMethod) => set({ fulfillmentMethod }),
+
+  setSelectedDeliveryZoneId: (selectedDeliveryZoneId) =>
+    set({ selectedDeliveryZoneId }),
 
   setSelectedDate: (selectedDate) => set({ selectedDate }),
 
@@ -109,13 +139,21 @@ export const useCartStore = create<CartState>((set) => ({
 
   openCheckoutWithProduct: (product, store) =>
     set((state) => {
+      const targetStore = store || state.currentStore;
+      const defaultZone =
+        targetStore?.deliveryFeeConfig?.defaultZoneId ||
+        targetStore?.deliveryFeeConfig?.zones?.[0]?.id ||
+        null;
+
       // If store is passed and different from currentStoreSlug, reset tenant data
       if (store && state.currentStoreSlug !== store.slug) {
         return {
           currentStoreSlug: store.slug,
           currentStore: store,
           selectedProduct: product,
+          selectedAddonIds: [],
           fulfillmentMethod: "delivery",
+          selectedDeliveryZoneId: defaultZone,
           selectedDate: "",
           selectedTime: "",
           customerDetails: initialCustomerDetails,
@@ -126,19 +164,25 @@ export const useCartStore = create<CartState>((set) => ({
       return {
         selectedProduct: product,
         ...(store ? { currentStore: store, currentStoreSlug: store.slug } : {}),
+        selectedDeliveryZoneId: state.selectedDeliveryZoneId || defaultZone,
         isCheckoutDrawerOpen: true,
         checkoutStep: 1,
       };
     }),
 
   resetCheckout: () =>
-    set({
+    set((state) => ({
       selectedProduct: null,
+      selectedAddonIds: [],
       fulfillmentMethod: "delivery",
+      selectedDeliveryZoneId:
+        state.currentStore?.deliveryFeeConfig?.defaultZoneId ||
+        state.currentStore?.deliveryFeeConfig?.zones?.[0]?.id ||
+        null,
       selectedDate: "",
       selectedTime: "",
       customerDetails: initialCustomerDetails,
       isCheckoutDrawerOpen: false,
       checkoutStep: 1,
-    }),
+    })),
 }));

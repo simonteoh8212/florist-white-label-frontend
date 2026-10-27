@@ -2,9 +2,10 @@
 
 import React, { Suspense } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { floristConfig } from "@/config/florist.config";
-import { CheckCircle2, Home, MessageCircle, Sparkles } from "lucide-react";
+import { CheckCircle2, Home, Sparkles } from "lucide-react";
 import { useTranslation } from "@/i18n/localeStore";
 import { LanguageSelector } from "@/components/LanguageSelector";
 
@@ -64,7 +65,14 @@ function SuccessContent() {
             rel="noopener noreferrer"
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 px-4 text-xs font-bold text-white shadow-xs hover:bg-[#20ba59] active:scale-98 transition-all"
           >
-            <MessageCircle className="h-4 w-4 fill-white text-[#25D366]" />
+            <Image
+              src="/icons/whatsapp.svg"
+              alt="WhatsApp"
+              width={16}
+              height={16}
+              className="h-4 w-4 brightness-0 invert shrink-0"
+              unoptimized
+            />
             <span>{t("notifyWhatsApp")}</span>
           </a>
 

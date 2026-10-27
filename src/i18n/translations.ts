@@ -75,7 +75,13 @@ export const translations = {
     fulfillmentDate: "Delivery / Pickup Date",
     today: "Today",
     todayClosed: "Today (Closed)",
+    todayPaused: "Today (Paused)",
     tomorrow: "Tomorrow",
+    tomorrowBlocked: "Tomorrow (Unavailable)",
+    emergencyPauseNotice:
+      "Same-day deliveries are temporarily paused today due to high order volume or emergency. Please choose tomorrow or a later date.",
+    tomorrowBlockedNotice:
+      "Deliveries for tomorrow are currently unavailable due to store capacity. Please choose another date.",
     preferredTimeSlot: "Preferred Time Slot",
     exactDeliveryTime: "Exact Delivery Time",
     pastSlotsHidden: "Past slots hidden",
@@ -88,6 +94,20 @@ export const translations = {
     quickSelect: "Quick Select:",
     minPreparationNotice:
       "* Minimum {hours}h preparation time required (earliest today: {time}).",
+    rushOrderTitle: "Same-Day Rush Delivery Slot",
+    rushOrderNotice:
+      "Order received during or close to delivery window. Our florists will do their best! Final delivery timing will be confirmed via WhatsApp.",
+    rushBadge: "⚡ Rush",
+    // Holiday Peak Surcharge & Capacity
+    holidayPeakBadge: "Peak Holiday Season",
+    holidayPeakNotice: "Wholesale fresh flowers experience seasonal market adjustments during peak holiday periods.",
+    holidayCapacitySoldOut: "{holiday} is fully booked! We have reached maximum studio capacity for {date}.",
+    suggestAlternativeDate: "We recommend choosing {altLabel} to secure fresh blooms!",
+    switchToAltDate: "Switch to {altLabel} →",
+    peakSurchargeLineItem: "Peak Holiday Surcharge ({holiday}):",
+    holidayBroadWindowsNotice: "Broad delivery windows are in effect for {holiday} to ensure safe courier dispatch during peak road traffic.",
+    holidayInclusiveBadge: "Holiday Seasonal Price",
+    holidayDirectPriceNotice: "Product price reflects seasonal holiday market adjustments.",
     recipientContactDetails: "Recipient & Contact Details",
     recipientNamePlaceholder: "Recipient / Customer Name *",
     phonePlaceholder: "WhatsApp Phone Number *",
@@ -113,6 +133,26 @@ export const translations = {
       "Please choose a delivery time within operating hours ({start} – {end}).",
     validationTimeSlot: "Please choose a preferred delivery time slot.",
     validationAddress: "Please enter your complete delivery address.",
+    validationDeliveryZone: "Please select your delivery area / zone.",
+    validationStoreClosedDate: "The store is closed on the selected date. Please pick an open date.",
+
+    // Delivery Area & Add-ons
+    deliveryArea: "Delivery Area / Zone",
+    selectDeliveryArea: "Select delivery area / zone *",
+    deliveryFee: "Delivery Fee",
+    freeDelivery: "FREE Delivery",
+    freeDeliveryThresholdNote: "Free delivery on orders {threshold} and above!",
+    freeDeliveryApplied: "FREE (Promo Applied)",
+    enhanceYourGift: "Enhance Your Gift",
+    enhanceYourGiftSubtitle: "Add thoughtful extras to make the moment unforgettable",
+    selectedCount: "{count} selected",
+    subtotal: "Bouquet Subtotal",
+    addonsTotal: "Add-ons",
+    orderTotal: "Order Total",
+    storeClosedDayWarning:
+      "Store is closed on this date ({reason}). Please select another date.",
+    regularWeeklyClosed: "Weekly Rest Day",
+    holidayBlackoutClosed: "Holiday / Special Blackout Date",
 
     // Checkout Drawer - Step 2 (TngPaymentView)
     editOrderDetails: "Edit Order Details",
@@ -276,7 +316,13 @@ export const translations = {
     fulfillmentDate: "配送 / 自取日期",
     today: "今天",
     todayClosed: "今天（已截止）",
+    todayPaused: "今天（临时暂停）",
     tomorrow: "明天",
+    tomorrowBlocked: "明天（暂不可选）",
+    emergencyPauseNotice:
+      "因单量饱和或突发情况，今日当日达已临时暂停接单，请选择明天或之后的日期配送。",
+    tomorrowBlockedNotice:
+      "明日配送时段暂不可选，请选择其他日期订购。",
     preferredTimeSlot: "期望送达时段",
     exactDeliveryTime: "指定具体时间",
     pastSlotsHidden: "已过时段已隐藏",
@@ -289,6 +335,20 @@ export const translations = {
     quickSelect: "快捷选择：",
     minPreparationNotice:
       "* 需至少提前 {hours} 小时准备（今日最早可送达：{time}）。",
+    rushOrderTitle: "当日加急配送时段",
+    rushOrderNotice:
+      "该时段临近制作截单时间，花艺师将竭力为您制作，具体送达时间将通过 WhatsApp 最终确认。",
+    rushBadge: "⚡ 加急",
+    // Holiday Peak Surcharge & Capacity
+    holidayPeakBadge: "鲜花节日高峰期",
+    holidayPeakNotice: "节日高峰期间进口花材受产地拍卖价变动影响，包含节日专属保鲜制作。",
+    holidayCapacitySoldOut: "{holiday} 已满单！本店该日期手作名额已全满。",
+    suggestAlternativeDate: "建议您预约 {altLabel}，尽早为您锁存新鲜鲜花！",
+    switchToAltDate: "切换至 {altLabel} →",
+    peakSurchargeLineItem: "节日鲜花高峰附加费 ({holiday})：",
+    holidayBroadWindowsNotice: "为确保节日交通拥堵期间鲜花完好准时送达，{holiday} 期间统一采用大时段安心派送。",
+    holidayInclusiveBadge: "节日专属定价",
+    holidayDirectPriceNotice: "花礼标价已直接包含当季鲜花节日行情调整。",
     recipientContactDetails: "收件人与联络信息",
     recipientNamePlaceholder: "收件人 / 订购人姓名 *",
     phonePlaceholder: "WhatsApp 联络电话 *",
@@ -314,6 +374,26 @@ export const translations = {
       "请选择营业时间内的送达时间（{start} – {end}）。",
     validationTimeSlot: "请选择期望配送时段。",
     validationAddress: "请填写完整的配送地址。",
+    validationDeliveryZone: "请选择您的送花目的地配送区域。",
+    validationStoreClosedDate: "所选日期本店休息不营业，请选择营业中的日期。",
+
+    // Delivery Area & Add-ons
+    deliveryArea: "配送区域 / 送花范围",
+    selectDeliveryArea: "请选择配送区域 *",
+    deliveryFee: "配送运费",
+    freeDelivery: "免费专人送花",
+    freeDeliveryThresholdNote: "消费满 {threshold} 享全单免运费！",
+    freeDeliveryApplied: "免运费 (已享优惠)",
+    enhanceYourGift: "心意加购配饰",
+    enhanceYourGiftSubtitle: "为花礼增添一份更贴心的惊喜",
+    selectedCount: "已选 {count} 项",
+    subtotal: "花礼小计",
+    addonsTotal: "配饰加购",
+    orderTotal: "订单总额",
+    storeClosedDayWarning:
+      "本店在此日期休息不营业（{reason}），请选择其他配送日期。",
+    regularWeeklyClosed: "每周常规公休日",
+    holidayBlackoutClosed: "公休假期 / 特殊店休日",
 
     // Checkout Drawer - Step 2 (TngPaymentView)
     editOrderDetails: "返回修改订单信息",

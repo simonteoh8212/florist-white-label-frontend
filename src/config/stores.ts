@@ -26,6 +26,32 @@ export interface DeliveryTimeSlot {
   cutoffMinute?: number; // 0-59 (default 0)
 }
 
+export interface DeliveryZone {
+  id: string;
+  name: string;
+  nameZh?: string;
+  fee: number;
+}
+
+export interface DeliveryFeeConfig {
+  enabled: boolean;
+  freeDeliveryThreshold?: number; // e.g. 250 (RM 250 or more = free delivery)
+  zones: DeliveryZone[];
+  defaultZoneId?: string;
+}
+
+export interface StoreAddon {
+  id: string;
+  name: string;
+  nameZh?: string;
+  price: number;
+  description?: string;
+  descriptionZh?: string;
+  icon?: "sparkles" | "balloon" | "gift" | "heart" | "card";
+}
+
+export type RushStrategy = "rush_with_warning" | "strict_cutoff" | "flexible";
+
 export interface DeliveryTimeConfig {
   type: DeliveryTimeType; // "range" or "exact"
   // For type === "range": customize any number of time ranges (e.g. hourly slots)
@@ -36,6 +62,49 @@ export interface DeliveryTimeConfig {
     end: string; // e.g. "19:00"
   };
   sameDayLeadHours?: number; // Advance hours needed for same-day delivery (e.g. 2)
+
+  // Rush order strategy for same-day delivery:
+  // - "rush_with_warning": (Recommended) Slots stay open until cutoff, but display an urgent rush warning if ordered close to window.
+  // - "strict_cutoff": Slots close strictly when the hour starts (e.g. 10:00 AM slot closes at 10:00 AM).
+  // - "flexible": Standard booking window throughout operating hours.
+  rushStrategy?: RushStrategy;
+  rushThresholdMinutes?: number; // Minutes before slot start/end considered rush (default 45)
+
+  // Regular weekly closed days (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  closedDaysOfWeek?: number[];
+
+  // Specific holiday or blackout dates (YYYY-MM-DD)
+  blackoutDates?: string[];
+}
+
+export type HolidayPricingDisplayMode = "separate_surcharge" | "inclusive";
+
+export interface HolidayPeakRule {
+  id: string; // e.g. "valentines" | "mothers_day"
+  name: string; // e.g. "Valentine's Day Peak"
+  nameZh?: string; // e.g. "情人节鲜花高峰期"
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string; // "YYYY-MM-DD"
+  surchargeType: "fixed" | "percentage"; // Both fixed amount (+RM 35) and percentage (+20%) supported
+  surchargeAmount: number; // e.g. 35 for +RM 35, or 20 for +20%
+  /**
+   * Pricing display strategy for festive peak season:
+   * - "separate_surcharge" (default): Keep base product price and show a separate "Peak Holiday Surcharge" line item.
+   * - "inclusive": Directly incorporate the festive surge into the product price (e.g. RM 168 + RM 35 = RM 203) with no extra fee line item.
+   */
+  pricingDisplay?: HolidayPricingDisplayMode;
+  maxDailyOrders?: number; // Studio daily capacity limit (e.g. 70 orders)
+  alternativeDate?: string; // e.g. "2027-02-13" (suggest Valentine's Eve when sold out)
+  alternativeDateLabel?: string; // e.g. "Valentine's Eve (Feb 13)"
+  alternativeDateLabelZh?: string; // e.g. "情人节前夕 (2月13日)"
+  peakSlots?: string[]; // Optional broad fulfillment windows during peak traffic (e.g. Morning, Afternoon, Evening)
+  noticeMessage?: string; // Optional customer explanation
+  noticeMessageZh?: string;
+}
+
+export interface HolidayPeakConfig {
+  enabled: boolean;
+  rules: HolidayPeakRule[];
 }
 
 export interface StoreConfig {
@@ -57,108 +126,58 @@ export interface StoreConfig {
   paymentMode?: PaymentMode;
   gatewayCheckoutUrl?: string;
 
-  // Delivery Time Configuration (Time range slots vs Exact time)
+  // Delivery Time Configuration (Time range slots vs Exact time, operating days)
   deliveryTimeConfig?: DeliveryTimeConfig;
+
+  // Peak Holiday Dynamic Surcharge & Capacity Engine (Valentine's, Mother's Day)
+  holidayPeakConfig?: HolidayPeakConfig;
+
+  // Dynamic Delivery Fee / Zone Configuration (per-tenant)
+  deliveryFeeConfig?: DeliveryFeeConfig;
+
+  // Dynamic Gift Add-ons (Balloons, lights, chocolates, cards)
+  addons?: StoreAddon[];
 
   // Multi-language localization configuration (per-tenant switch)
   enableLanguageSelector?: boolean; // Defaults to true; set false to hide switcher
   defaultLocale?: "en" | "zh"; // Default starting locale
   supportedLocales?: ("en" | "zh")[]; // Available locales for this store
+  // Staff Terminal PIN (Default for merchant access)
+  adminPin?: string;
 
   products: Product[];
 }
 
-// Modular Tenant Product Catalogs (Easily imported via CSV or edited per tenant)
-import autarixProducts from "./tenants/autarix/products.json";
-import greenlandProducts from "./tenants/greenland/products.json";
-
-export const STORES: Record<string, StoreConfig> = {
-  autarix: {
-    id: "store_autarix",
-    name: "Autarix Florist & Gift",
-    companyName: "Autarix Florist & Gift",
-    ssmNumber: "PG0523418-V",
-    slug: "autarix",
-    whatsapp: "+6012-542 0555",
-    primaryColor: "#BE185D", // Luxe Crimson / Rose
-    logo: "/stores/autarix/logo.webp",
-    tagline: "Bespoke Artisanal Bouquets & Preserved Floral Art",
-    currency: "RM",
-    pickupAddress: "1-G-6, Medan Angsana 4, Farlim Business Centre, 11500 Ayer Itam, Pulau Pinang",
-    googleMapsUrl: "https://maps.app.goo.gl/LqXTrwJFXAhr1rtA7",
-    tngQrUrl: "/stores/autarix/tng-qr.svg",
-    tngAccountName: "Autarix Florist & Gift (TNG eWallet)",
-    tngDeepLink: "tngewallet://",
-    paymentMode: "static_qr",
-    gatewayCheckoutUrl: "https://checkout.hitpayapp.com/pay/autarix-demo",
-
-    // Delivery time configuration: 1-hour time ranges throughout operating hours (10:00 AM – 8:00 PM)
-    // Store clients can use generateHourlySlots(startHour, endHour) or pass custom slot objects
-    deliveryTimeConfig: {
-      type: "range",
-      slots: generateHourlySlots(10, 20),
-    },
-
-    // Multi-language localization configuration
-    enableLanguageSelector: false,
-    defaultLocale: "en",
-    supportedLocales: ["en", "zh"],
-
-    // Products loaded from src/config/tenants/autarix/products.json
-    products: autarixProducts as Product[],
-  },
-
-  greenland: {
-    id: "store_greenland",
-    name: "Greenland Botanical & Living Florals",
-    companyName: "Greenland Botanical Sdn. Bhd.",
-    ssmNumber: "202301048291 (1528211-T)",
-    slug: "greenland",
-    whatsapp: "+60198765432",
-    primaryColor: "#059669", // Botanical Emerald
-    logo: "/stores/greenland/logo.svg",
-    tagline: "Sustainable Living Plants, Cascading Orchids & Wild Botanicals",
-    currency: "RM",
-    pickupAddress: "Lot 4B, The Greenhouse Pavilion, Mont Kiara, 50480 Kuala Lumpur, Malaysia",
-    googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=The+Greenhouse+Pavilion+Mont+Kiara+50480+Kuala+Lumpur",
-    tngQrUrl: "/stores/greenland/tng-qr.svg",
-    tngAccountName: "Greenland Botanical Co. (TNG eWallet)",
-    tngDeepLink: "tngewallet://",
-    paymentMode: "static_qr",
-    gatewayCheckoutUrl: "https://checkout.hitpayapp.com/pay/greenland-demo",
-
-    // Delivery time configuration: Exact time selection with operating hours and 2 hours lead time
-    deliveryTimeConfig: {
-      type: "exact",
-      operatingHours: {
-        start: "09:00",
-        end: "19:00",
-      },
-      sameDayLeadHours: 2,
-    },
-
-    // Multi-language localization configuration
-    enableLanguageSelector: true,
-    defaultLocale: "en",
-    supportedLocales: ["en", "zh"],
-
-    // Products loaded from src/config/tenants/greenland/products.json
-    products: greenlandProducts as Product[],
-  },
-};
-
 /**
- * Helper to fetch store configuration by slug.
+ * Convenient utility to generate hourly delivery time slots (e.g. 10 AM – 11 AM, 11 AM – 12 PM, etc.)
+ *
+ * @param startHour 24h start hour (e.g. 9 for 9:00 AM)
+ * @param endHour 24h end hour (e.g. 20 for 8:00 PM)
+ * @param cutoffLeadMinutes Advance minutes before slot start to close bookings
  */
-export function getStoreBySlug(slug: string): StoreConfig | undefined {
-  return STORES[slug.toLowerCase()];
-}
+export function generateHourlySlots(
+  startHour: number = 10,
+  endHour: number = 20
+): DeliveryTimeSlot[] {
+  const slots: DeliveryTimeSlot[] = [];
+  const formatHour12 = (h: number) => {
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:00 ${ampm}`;
+  };
 
-/**
- * Returns all store slugs for static generation or routing.
- */
-export function getAllStoreSlugs(): string[] {
-  return Object.keys(STORES);
+  for (let h = startHour; h < endHour; h++) {
+    const startLabel = formatHour12(h);
+    const endLabel = formatHour12(h + 1);
+    slots.push({
+      id: `${h}-${h + 1}`,
+      label: `${startLabel} – ${endLabel}`,
+      cutoffHour: h + 1, // slot closes when the hour window concludes
+      cutoffMinute: 0,
+    });
+  }
+
+  return slots;
 }
 
 /**
@@ -189,34 +208,21 @@ export function getProductLocalized(
   };
 }
 
+// Modular Tenant Stores Data (Loaded from dedicated stores.data.ts)
+import { STORES } from "./stores.data";
+export { STORES };
+
 /**
- * Convenient utility to generate hourly delivery time slots (e.g. 10 AM – 11 AM, 11 AM – 12 PM, etc.)
- *
- * @param startHour 24h start hour (e.g. 9 for 9:00 AM)
- * @param endHour 24h end hour (e.g. 20 for 8:00 PM)
- * @param cutoffLeadMinutes Advance minutes before slot start to close bookings (defaults to 0, which means cutoff is at slot start or slot end)
+ * Helper to fetch store configuration by slug.
  */
-export function generateHourlySlots(
-  startHour: number = 10,
-  endHour: number = 20
-): DeliveryTimeSlot[] {
-  const slots: DeliveryTimeSlot[] = [];
-  const formatHour12 = (h: number) => {
-    const ampm = h >= 12 ? "PM" : "AM";
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    return `${h12}:00 ${ampm}`;
-  };
-
-  for (let h = startHour; h < endHour; h++) {
-    const startLabel = formatHour12(h);
-    const endLabel = formatHour12(h + 1);
-    slots.push({
-      id: `${h}-${h + 1}`,
-      label: `${startLabel} – ${endLabel}`,
-      cutoffHour: h + 1, // slot closes when the hour window concludes (or configure as needed)
-      cutoffMinute: 0,
-    });
-  }
-
-  return slots;
+export function getStoreBySlug(slug: string): StoreConfig | undefined {
+  return STORES[slug.toLowerCase()];
 }
+
+/**
+ * Returns all store slugs for static generation or routing.
+ */
+export function getAllStoreSlugs(): string[] {
+  return Object.keys(STORES);
+}
+

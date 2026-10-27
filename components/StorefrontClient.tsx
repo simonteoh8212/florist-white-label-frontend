@@ -2,12 +2,14 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Product, StoreConfig } from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
 import { ProductCard } from "@/components/ProductCard";
 import { CheckoutDrawer } from "@/components/CheckoutDrawer";
 import { ProductImageModal } from "@/components/ProductImageModal";
 import { StorePolicyModal } from "@/components/StorePolicyModal";
+import { StorePausedAnnouncementModal } from "@/components/StorePausedAnnouncementModal";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTranslation } from "@/i18n/localeStore";
 import {
@@ -19,27 +21,71 @@ import {
   ExternalLink,
   Heart,
   MapPin,
-  MessageCircle,
   Phone,
   Search,
   ShieldCheck,
   Sparkles,
   Truck,
   X,
+  AlertCircle,
+  Lock,
 } from "lucide-react";
+import { StoreEmergencyStatus } from "@/lib/storeStatus";
 
 type SortOption = "none" | "price_high_low" | "price_low_high";
 
 interface StorefrontClientProps {
   store: StoreConfig;
+  initialStatus?: StoreEmergencyStatus;
 }
 
-export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => {
+export const StorefrontClient: React.FC<StorefrontClientProps> = ({
+  store,
+  initialStatus,
+}) => {
   const { t, getCategory } = useTranslation();
   const syncTenantStore = useCartStore((state) => state.syncTenantStore);
   const openCheckoutWithProduct = useCartStore(
     (state) => state.openCheckoutWithProduct
   );
+
+  // Store Emergency & Capacity Status
+  const [storeStatus, setStoreStatus] = useState<StoreEmergencyStatus | undefined>(
+    initialStatus
+  );
+
+  useEffect(() => {
+    if (initialStatus) {
+      setStoreStatus(initialStatus);
+    }
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch(`/api/store/status?slug=${encodeURIComponent(store.slug)}`);
+        const data = await res.json();
+        if (res.ok && data.success && data.status) {
+          setStoreStatus(data.status);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch store status:", e);
+      }
+    };
+    fetchStatus();
+  }, [store.slug, initialStatus]);
+
+  // Dynamic staff orders link based on current domain:
+  // If on subdomain (autarix.flowerapp.my or autarix.localhost), "/orders" goes to the order book.
+  // If on bare localhost (localhost:3000/store/autarix), "/store/autarix/orders" goes to the order book.
+  const [ordersHref, setOrdersHref] = useState(`/store/${store.slug}/orders`);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isSubdomain =
+        window.location.host.startsWith(`${store.slug}.`) ||
+        !window.location.pathname.startsWith(`/store/${store.slug}`);
+      if (isSubdomain) {
+        setOrdersHref("/orders");
+      }
+    }
+  }, [store.slug]);
 
   // Sync tenant on mount and ensure previous tenant's cart is wiped if different
   useEffect(() => {
@@ -186,14 +232,26 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
     >
       {/* Mobile-first centered container */}
       <main className="mx-auto flex min-h-screen max-w-md flex-col bg-white shadow-xl shadow-stone-200/50 sm:rounded-3xl sm:my-6 sm:border sm:border-stone-200/60">
-        {/* Top Announcement Bar */}
-        <div
-          className="flex items-center justify-center gap-1.5 py-2 px-4 text-center text-[11px] font-semibold text-white tracking-wide transition-colors sm:rounded-t-3xl"
-          style={{ backgroundColor: store.primaryColor }}
-        >
-          <Sparkles className="h-3 w-3" />
-          <span>{t("announcement")}</span>
-        </div>
+        {/* Top Announcement Bar / Emergency Banner */}
+        {storeStatus?.emergencyNotice ? (
+          <div className="flex items-center justify-center gap-1.5 py-2.5 px-4 text-center text-xs font-bold text-amber-950 bg-amber-100 border-b border-amber-300 sm:rounded-t-3xl shadow-xs">
+            <AlertCircle className="h-4 w-4 text-amber-700 shrink-0" />
+            <span>{storeStatus.emergencyNotice}</span>
+          </div>
+        ) : storeStatus?.isTodayPaused ? (
+          <div className="flex items-center justify-center gap-1.5 py-2.5 px-4 text-center text-xs font-bold text-rose-950 bg-rose-100 border-b border-rose-300 sm:rounded-t-3xl shadow-xs">
+            <AlertCircle className="h-4 w-4 text-rose-700 shrink-0" />
+            <span>Notice: Same-day deliveries for today are paused. Accepting deliveries for tomorrow onwards!</span>
+          </div>
+        ) : (
+          <div
+            className="flex items-center justify-center gap-1.5 py-2 px-4 text-center text-[11px] font-semibold text-white tracking-wide transition-colors sm:rounded-t-3xl"
+            style={{ backgroundColor: store.primaryColor }}
+          >
+            <Sparkles className="h-3 w-3" />
+            <span>{t("announcement")}</span>
+          </div>
+        )}
 
         {/* Brand Header (Sticky at top) */}
         <header className="relative flex h-16 items-center justify-between border-b border-stone-100 bg-white/95 px-3.5 backdrop-blur-md sticky top-0 z-30">
@@ -229,7 +287,14 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
               className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/80 transition-all active:scale-95 hover:bg-emerald-100 whitespace-nowrap shrink-0 shadow-2xs"
               aria-label={t("chatAria", { store: store.name })}
             >
-              <MessageCircle className="h-3.5 w-3.5 fill-emerald-600 text-emerald-600 shrink-0" />
+              <Image
+                src="/icons/whatsapp.svg"
+                alt="WhatsApp"
+                width={14}
+                height={14}
+                className="h-3.5 w-3.5 shrink-0"
+                unoptimized
+              />
               <span className="whitespace-nowrap">{t("chat")}</span>
             </a>
           </div>
@@ -444,7 +509,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
         </section>
 
         {/* Catalog Grid */}
-        <section className="flex-1 px-4 py-2">
+        <section id="catalog-section" className="flex-1 px-4 py-2">
           <div className="flex items-center justify-between pb-2.5">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
@@ -627,6 +692,18 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
               {t("footerDisclaimer", { store: store.name })}
             </p>
           </div>
+
+          {/* Discreet Staff Dispatch Desk & Order Book Access */}
+          <div className="pt-2 border-t border-stone-200/50 mt-1">
+            <Link
+              href={ordersHref}
+              className="inline-flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-600 transition-colors"
+              title="Staff Dispatch Desk & Order Book"
+            >
+              <Lock className="h-2.5 w-2.5" />
+              <span>Staff Dispatch &amp; POS</span>
+            </Link>
+          </div>
         </footer>
 
         {/* Scroll to Top Floating Button */}
@@ -661,7 +738,10 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({ store }) => 
         />
 
         {/* Root Level Mounted Checkout Drawer for this Store */}
-        <CheckoutDrawer store={store} />
+        <CheckoutDrawer store={store} storeStatus={storeStatus} />
+
+        {/* Store Paused & Non-Operating Announcement Pop-up Modal */}
+        <StorePausedAnnouncementModal store={store} storeStatus={storeStatus} />
       </main>
     </div>
   );
