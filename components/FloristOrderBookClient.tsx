@@ -42,6 +42,7 @@ import {
   QrCode,
   PieChart,
   Globe,
+  Loader2,
 } from "lucide-react";
 import { StoreEmergencyStatus } from "@/lib/storeStatus";
 
@@ -82,6 +83,8 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   // Emergency & Capacity Controls State (Option A)
   const [storeStatus, setStoreStatus] = useState<StoreEmergencyStatus | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [updatingStockProductId, setUpdatingStockProductId] = useState<string | null>(null);
+  const [isResettingAllStock, setIsResettingAllStock] = useState(false);
   const [isEmergencyPanelOpen, setIsEmergencyPanelOpen] = useState(false);
   const [emergencyNoticeInput, setEmergencyNoticeInput] = useState("");
 
@@ -354,6 +357,77 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
       showToast("Network error updating status");
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  // 1-Tap toggle individual product stock status
+  const handleToggleProductStock = async (productId: string) => {
+    const currentOutOfStock = storeStatus?.outOfStockProductIds || [];
+    const isCurrentlyOut = currentOutOfStock.includes(productId);
+    const newOutOfStock = isCurrentlyOut
+      ? currentOutOfStock.filter((id) => id !== productId)
+      : [...currentOutOfStock, productId];
+
+    const targetProduct = store.products.find((p) => p.id === productId);
+    const productName = targetProduct ? targetProduct.name : "Product";
+
+    setUpdatingStockProductId(productId);
+    setIsUpdatingStatus(true);
+    try {
+      const res = await fetch("/api/store/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeSlug: store.slug,
+          pin,
+          outOfStockProductIds: newOutOfStock,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setStoreStatus(data.status);
+        showToast(
+          isCurrentlyOut
+            ? `"${productName}" is back IN STOCK`
+            : `"${productName}" marked as SOLD OUT`
+        );
+      } else {
+        showToast(data.error || "Failed to update stock status");
+      }
+    } catch {
+      showToast("Network error updating stock status");
+    } finally {
+      setIsUpdatingStatus(false);
+      setUpdatingStockProductId(null);
+    }
+  };
+
+  // Reset all products back in-stock
+  const handleResetAllStock = async () => {
+    setIsResettingAllStock(true);
+    setIsUpdatingStatus(true);
+    try {
+      const res = await fetch("/api/store/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeSlug: store.slug,
+          pin,
+          outOfStockProductIds: [],
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setStoreStatus(data.status);
+        showToast("All bouquets marked back IN STOCK!");
+      } else {
+        showToast(data.error || "Failed to reset stock status");
+      }
+    } catch {
+      showToast("Network error resetting stock");
+    } finally {
+      setIsUpdatingStatus(false);
+      setIsResettingAllStock(false);
     }
   };
 
@@ -978,8 +1052,8 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     <div className="min-h-screen bg-[#F8FAFC] text-stone-900 pb-16">
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-2xs">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+        <div className="max-w-2xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="h-9 w-9 relative rounded-xl bg-stone-100 border border-stone-200/80 overflow-hidden flex items-center justify-center shrink-0">
               <Image
                 src={store.logo}
@@ -989,59 +1063,59 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                 className="object-contain"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <h1 className="text-sm font-bold text-stone-900 leading-tight">
+                <h1 className="text-sm font-bold text-stone-900 leading-tight truncate">
                   {store.name}
                 </h1>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Dispatch
-                </span>
               </div>
-              <p className="text-[11px] text-stone-500">
+              <p className="text-[11px] text-stone-500 truncate">
                 Staff Order Book &middot; PIN: {pin}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2 shrink-0">
+            {/* Utility action buttons (Refresh, Shop, Lock) */}
+            <div className="flex items-center gap-1.5 justify-end w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => fetchOrders(pin)}
+                disabled={isLoadingOrders}
+                className="p-1.5 sm:p-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 active:scale-95 border border-stone-200/70 transition-all cursor-pointer"
+                title="Refresh Orders"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${isLoadingOrders ? "animate-spin text-stone-900" : ""}`} />
+              </button>
+
+              <Link
+                href={storefrontHref}
+                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 active:scale-95 transition-all inline-flex items-center gap-1"
+                title="Go to customer shop"
+              >
+                <ExternalLink className="h-3 w-3" />
+                <span>Shop</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-1.5 sm:p-2 rounded-xl text-stone-500 hover:text-rose-600 hover:bg-rose-50 active:scale-95 border border-stone-200/70 transition-all cursor-pointer"
+                title="Lock / Logout"
+              >
+                <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </button>
+            </div>
+
+            {/* Quick Order Button: Placed underneath Refresh/Shop/Lock on mobile, or inline on desktop */}
             <button
               type="button"
               onClick={() => setIsQuickOrderOpen(true)}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-stone-900 hover:bg-black transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              className="w-full self-stretch sm:self-auto sm:w-auto px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-stone-900 hover:bg-black active:scale-[0.98] transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer order-last sm:order-first"
               title="Record Walk-in takeaway or Phone call order"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Record Order</span>
-              <span className="sm:hidden">+ Order</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => fetchOrders(pin)}
-              disabled={isLoadingOrders}
-              className="p-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 border border-stone-200/70 transition-all cursor-pointer"
-              title="Refresh Orders"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoadingOrders ? "animate-spin text-stone-900" : ""}`} />
-            </button>
-
-            <Link
-              href={storefrontHref}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 transition-colors inline-flex items-center gap-1"
-              title="Go to customer shop"
-            >
-              <ExternalLink className="h-3 w-3" />
-              <span>Shop</span>
-            </Link>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="p-2 rounded-xl text-stone-500 hover:text-rose-600 hover:bg-rose-50 border border-stone-200/70 transition-all cursor-pointer"
-              title="Lock / Logout"
-            >
-              <Lock className="h-4 w-4" />
+              <span>Order</span>
             </button>
           </div>
         </div>
@@ -1433,6 +1507,141 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                   </div>
                 </div>
               )}
+
+              {/* Control 5: Bouquet Stock Availability (Instant Out-of-Stock Toggle) */}
+              <div className="pt-2.5 border-t border-stone-200/70">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <ShoppingBag className="h-3.5 w-3.5 text-stone-700" />
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700">
+                      5. Bouquet Stock Availability
+                    </label>
+                  </div>
+                  <div>
+                    {(() => {
+                      const outCount = storeStatus?.outOfStockProductIds?.length || 0;
+                      return (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            outCount > 0
+                              ? "bg-rose-100 text-rose-700 border border-rose-200"
+                              : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                          }`}
+                        >
+                          {outCount > 0 ? `${outCount} Sold Out` : "All In Stock"}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-stone-500 mb-2 leading-relaxed">
+                  Ran out of blooms today? Tap any bouquet below to mark it <strong>Sold Out</strong> on your website. Tap again to restore when fresh stock arrives:
+                </p>
+
+                {/* Products Stock List */}
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-0.5">
+                  {store.products.map((prod) => {
+                    const isOut = Boolean(
+                      storeStatus?.outOfStockProductIds?.includes(prod.id)
+                    );
+                    return (
+                      <div
+                        key={prod.id}
+                        className={`flex items-center justify-between p-2 rounded-xl border transition-all ${
+                          isOut
+                            ? "bg-rose-50/70 border-rose-200/80"
+                            : "bg-white border-stone-200/80 hover:border-stone-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                          <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-stone-100 border border-stone-200/60">
+                            <Image
+                              src={prod.image}
+                              alt={prod.name}
+                              fill
+                              sizes="36px"
+                              className={`object-cover ${isOut ? "grayscale opacity-75" : ""}`}
+                            />
+                            {isOut && (
+                              <div className="absolute inset-0 bg-black/35 flex items-center justify-center">
+                                <Ban className="h-3.5 w-3.5 text-white stroke-[3]" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <span
+                              className={`block text-[11px] font-bold truncate ${
+                                isOut ? "text-stone-500 line-through" : "text-stone-900"
+                              }`}
+                            >
+                              {prod.name}
+                            </span>
+                            <span className="text-[10px] text-stone-500">
+                              {currency} {prod.price.toFixed(2)} &bull; {prod.category || "Bouquet"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 1-Tap Toggle Pill with Loading Indicator */}
+                        <button
+                          type="button"
+                          disabled={isUpdatingStatus || updatingStockProductId === prod.id}
+                          onClick={() => handleToggleProductStock(prod.id)}
+                          className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all shadow-2xs ${
+                            updatingStockProductId === prod.id
+                              ? "opacity-80 cursor-wait bg-stone-100 text-stone-600 border border-stone-300"
+                              : isOut
+                              ? "bg-rose-600 hover:bg-rose-700 text-white cursor-pointer active:scale-95"
+                              : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 cursor-pointer active:scale-95"
+                          }`}
+                        >
+                          {updatingStockProductId === prod.id ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin text-stone-600" />
+                              <span>Updating...</span>
+                            </>
+                          ) : isOut ? (
+                            <>
+                              <Ban className="h-3 w-3 stroke-[2.5]" />
+                              <span>Sold Out</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="h-3 w-3 stroke-[3]" />
+                              <span>In Stock</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Reset all button if any item is out */}
+                {(storeStatus?.outOfStockProductIds?.length || 0) > 0 && (
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="button"
+                      disabled={isUpdatingStatus || isResettingAllStock}
+                      onClick={handleResetAllStock}
+                      className="inline-flex items-center gap-1 text-[10px] font-bold text-stone-600 hover:text-stone-900 underline cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {isResettingAllStock ? (
+                        <>
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                          <span>Resetting All...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-2.5 w-2.5" />
+                          <span>Reset: Mark All Bouquets In Stock</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1502,7 +1711,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             <div className="flex items-center gap-1.5">
               <PieChart className="h-4 w-4 text-stone-700" />
               <h3 className="text-xs font-bold text-stone-900">
-                Today&apos;s Sales Reconciliation
+                Today&apos;s Sales 
               </h3>
             </div>
             <button
@@ -1511,7 +1720,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               className="text-[11px] font-bold text-stone-700 hover:text-stone-900 inline-flex items-center gap-1 cursor-pointer hover:underline"
             >
               <Plus className="h-3 w-3" />
-              <span>Record Walk-In / Phone</span>
+              <span>Record</span>
             </button>
           </div>
 
@@ -1569,7 +1778,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           {/* Payment Method Distribution Bar */}
           <div className="pt-2 border-t border-stone-100 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-stone-600">
             <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              Payment Inflow:
+              Payment:
             </span>
             <div className="inline-flex items-center gap-1">
               <Banknote className="h-3 w-3 text-emerald-600" />
@@ -1723,7 +1932,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               }`}
             >
               <Store className="h-3 w-3" />
-              <span>Walk-In Counter</span>
+              <span>Walk-In</span>
             </button>
             <button
               type="button"
@@ -1768,7 +1977,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               <PackageCheck className="h-6 w-6 stroke-[1.5]" />
             </div>
             <h3 className="text-sm font-bold text-stone-900">
-              No orders found for this view
+              No orders found
             </h3>
             <p className="mt-1 text-xs text-stone-500 max-w-xs mx-auto">
               {searchQuery

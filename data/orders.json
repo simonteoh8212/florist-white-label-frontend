@@ -1,1 +1,86 @@
-[]
+[
+  {
+    "storeSlug": "autarix",
+    "product": {
+      "id": "autarix-08",
+      "name": "Peaceful Farewell Condolence Flowers",
+      "nameZh": "安息悼念白事追思花束",
+      "price": 220,
+      "image": "/stores/autarix/condolence_flowers.webp"
+    },
+    "addons": [],
+    "fulfillmentMethod": "pickup",
+    "deliveryFee": 0,
+    "deliveryDate": "2026-10-28",
+    "deliveryTimeSlot": "11:00 AM – 12:00 PM",
+    "recipient": {
+      "name": "Chun Seong Teoh",
+      "phone": "+60164738833"
+    },
+    "cardMessage": "Happy Birthday",
+    "notes": "",
+    "totalAmount": 220,
+    "paymentMode": "static_qr",
+    "paymentStatus": "paid_tng",
+    "orderSource": "web",
+    "fulfillmentStatus": "new",
+    "id": "ord_autarix_mvqt28vl",
+    "createdAt": "2026-10-27T14:53:16.785Z"
+  },
+  {
+    "storeSlug": "autarix",
+    "product": {
+      "id": "autarix-05",
+      "name": "Sunny Delight Yellow Flower Bouquet",
+      "nameZh": "向阳欢歌黄色花束",
+      "price": 148,
+      "image": "/stores/autarix/yellow_flowers.webp"
+    },
+    "addons": [],
+    "fulfillmentMethod": "pickup",
+    "deliveryFee": 0,
+    "deliveryDate": "2026-10-28",
+    "deliveryTimeSlot": "4:00 PM – 5:00 PM",
+    "recipient": {
+      "name": "Teoh Chun Seong",
+      "phone": "+60164738833"
+    },
+    "cardMessage": "",
+    "notes": "",
+    "totalAmount": 148,
+    "paymentMode": "static_qr",
+    "paymentStatus": "paid_tng",
+    "orderSource": "web",
+    "fulfillmentStatus": "new",
+    "id": "ord_autarix_mvqs3zgx",
+    "createdAt": "2026-10-27T14:26:38.289Z"
+  },
+  {
+    "storeSlug": "autarix",
+    "product": {
+      "id": "autarix-07",
+      "name": "Get Well Soon Fruit & Flower Basket",
+      "nameZh": "早日康复鲜花水果慰问篮",
+      "price": 188,
+      "image": "/stores/autarix/hospital_visit_flowers_and_fruits.webp"
+    },
+    "addons": [],
+    "fulfillmentMethod": "pickup",
+    "deliveryFee": 0,
+    "deliveryDate": "2026-10-28",
+    "deliveryTimeSlot": "10:00 AM – 11:00 AM",
+    "recipient": {
+      "name": "Chun Seong Teoh",
+      "phone": "+60164738833"
+    },
+    "cardMessage": "你好",
+    "notes": "",
+    "totalAmount": 188,
+    "paymentMode": "static_qr",
+    "paymentStatus": "paid_tng",
+    "orderSource": "web",
+    "fulfillmentStatus": "new",
+    "id": "ord_autarix_mvqrh5wt",
+    "createdAt": "2026-10-27T14:08:53.549Z"
+  }
+]

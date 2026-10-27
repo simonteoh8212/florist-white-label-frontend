@@ -61,13 +61,9 @@ export async function generateMetadata({
 }
 
 /**
- * Static generation parameter export for known tenant stores.
+ * Ensure live server rendering for real-time emergency status and product stock
  */
-export function generateStaticParams() {
-  return getAllStoreSlugs().map((slug) => ({
-    slug,
-  }));
-}
+export const dynamic = "force-dynamic";
 
 /**
  * Dynamic Multi-Tenant Storefront Page.

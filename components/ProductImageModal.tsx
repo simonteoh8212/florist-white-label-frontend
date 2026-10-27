@@ -2,7 +2,7 @@
 
 import React, { useEffect } from "react";
 import Image from "next/image";
-import { X, ShoppingBag, Sparkles, ZoomIn } from "lucide-react";
+import { X, ShoppingBag, Sparkles, ZoomIn, Ban } from "lucide-react";
 import { Product, StoreConfig, getProductLocalized } from "@/config/stores";
 import { useTranslation } from "@/i18n/localeStore";
 
@@ -10,6 +10,7 @@ interface ProductImageModalProps {
   product: Product | null;
   store?: StoreConfig;
   isOpen: boolean;
+  isSoldOut?: boolean;
   onClose: () => void;
   onOrderNow?: (product: Product) => void;
 }
@@ -18,6 +19,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
   product,
   store,
   isOpen,
+  isSoldOut = false,
   onClose,
   onOrderNow,
 }) => {
@@ -136,19 +138,30 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
 
           {/* Direct Order Now Action */}
           <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleOrder}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-md transition-all duration-200 hover:opacity-95 active:scale-98 cursor-pointer"
-              style={{ backgroundColor: primaryColor }}
-            >
-              <ShoppingBag className="h-4 w-4" />
-              <span>
-                {t("orderNowPrice", {
-                  price: `${currency} ${product.price.toFixed(2)}`,
-                })}
-              </span>
-            </button>
+            {isSoldOut ? (
+              <button
+                type="button"
+                disabled
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs sm:text-sm font-bold bg-stone-800 text-stone-400 cursor-not-allowed border border-white/10 shadow-none"
+              >
+                <Ban className="h-4 w-4 text-stone-400" />
+                <span>{locale === "zh" ? "今日已售罄 (明日开放)" : "Sold Out Today (Check Back Tomorrow)"}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleOrder}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-md transition-all duration-200 hover:opacity-95 active:scale-98 cursor-pointer"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <ShoppingBag className="h-4 w-4" />
+                <span>
+                  {t("orderNowPrice", {
+                    price: `${currency} ${product.price.toFixed(2)}`,
+                  })}
+                </span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}

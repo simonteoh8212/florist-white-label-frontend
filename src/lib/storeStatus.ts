@@ -9,6 +9,7 @@ export interface StoreEmergencyStatus {
   blockedDate?: string; // YYYY-MM-DD format
   emergencyNotice?: string;
   holidayPricingDisplay?: "separate_surcharge" | "inclusive";
+  outOfStockProductIds?: string[];
   updatedAt: string;
 }
 
@@ -143,6 +144,11 @@ export async function getStoreEmergencyStatus(slug: string): Promise<StoreEmerge
             blockedDate: row.blocked_date || tomorrowStr,
             emergencyNotice: row.emergency_notice || "",
             holidayPricingDisplay: row.holiday_pricing_display || row.holidayPricingDisplay || undefined,
+            outOfStockProductIds: Array.isArray(row.out_of_stock_product_ids)
+              ? row.out_of_stock_product_ids
+              : Array.isArray(row.outOfStockProductIds)
+              ? row.outOfStockProductIds
+              : [],
             updatedAt: row.updated_at || new Date().toISOString(),
           };
           return normalizeStatus(fetchedStatus);
@@ -180,6 +186,7 @@ export async function updateStoreEmergencyStatus(
     storeSlug: normalizedSlug,
     pausedDate: updates.isTodayPaused ? todayStr : updates.pausedDate ?? current.pausedDate ?? todayStr,
     blockedDate: updates.isTomorrowBlocked ? tomorrowStr : updates.blockedDate ?? current.blockedDate ?? tomorrowStr,
+    outOfStockProductIds: updates.outOfStockProductIds ?? current.outOfStockProductIds ?? [],
     updatedAt: new Date().toISOString(),
   };
 
@@ -203,6 +210,7 @@ export async function updateStoreEmergencyStatus(
           blocked_date: updated.blockedDate,
           emergency_notice: updated.emergencyNotice || null,
           holiday_pricing_display: updated.holidayPricingDisplay || null,
+          out_of_stock_product_ids: updated.outOfStockProductIds || [],
           updated_at: updated.updatedAt,
         }),
       });

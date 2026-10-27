@@ -167,6 +167,9 @@ export const STORES: Record<string, StoreConfig> = {
       },
     ],
 
+    // Storefront layout options (Hero Banner / Studio Introduction)
+    showHeroBanner: false,
+
     // Multi-language localization configuration
     enableLanguageSelector: false,
     defaultLocale: "en",
@@ -257,6 +260,9 @@ export const STORES: Record<string, StoreConfig> = {
         icon: "sparkles",
       },
     ],
+
+    // Storefront layout options (Hero Banner / Studio Introduction)
+    showHeroBanner: true,
 
     // Multi-language localization configuration
     enableLanguageSelector: true,

@@ -29,6 +29,10 @@ export const translations = {
     resetDefault: "Reset to default",
     removeSorting: "Remove sorting",
     searchBadge: "Search",
+    viewGrid: "Grid",
+    viewList: "List",
+    inStockOnly: "In Stock",
+    hideSoldOut: "Hide Sold Out",
 
     // Empty State
     noArrangements: "No arrangements found",
@@ -270,6 +274,10 @@ export const translations = {
     resetDefault: "恢复默认",
     removeSorting: "取消排序",
     searchBadge: "搜索",
+    viewGrid: "宫格",
+    viewList: "列表",
+    inStockOnly: "仅看有货",
+    hideSoldOut: "隐藏售罄",
 
     // Empty State
     noArrangements: "未找到相关花礼",

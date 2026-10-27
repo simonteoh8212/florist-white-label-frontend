@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
       isTomorrowBlocked,
       emergencyNotice,
       holidayPricingDisplay,
+      outOfStockProductIds,
     } = body;
 
     if (!storeSlug || !pin) {
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
       ...((holidayPricingDisplay === "separate_surcharge" || holidayPricingDisplay === "inclusive") && {
         holidayPricingDisplay,
       }),
+      ...(Array.isArray(outOfStockProductIds) && { outOfStockProductIds }),
     });
 
     return NextResponse.json({ success: true, status: updated });

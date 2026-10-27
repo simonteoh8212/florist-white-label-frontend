@@ -21,11 +21,13 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
+  Ban,
   Calendar,
   Check,
   Clock,
   ExternalLink,
   Heart,
+  Loader2,
   MapPin,
   Phone,
   Sparkles,
@@ -53,11 +55,13 @@ import {
 interface CheckoutDrawerProps {
   store?: StoreConfig;
   storeStatus?: StoreEmergencyStatus;
+  onStatusChange?: (status: StoreEmergencyStatus) => void;
 }
 
 export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
   store: storeProp,
   storeStatus: storeStatusProp,
+  onStatusChange,
 }) => {
   const currentStore = useCartStore((state) => state.currentStore);
   const store = storeProp || currentStore || STORES.autarix;
@@ -121,11 +125,12 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
         .then((data) => {
           if (data.success && data.status) {
             setLiveStatus(data.status);
+            onStatusChange?.(data.status);
           }
         })
         .catch((err) => console.warn("Failed to fetch store status in drawer:", err));
     }
-  }, [isCheckoutDrawerOpen, store.slug]);
+  }, [isCheckoutDrawerOpen, store.slug, onStatusChange]);
 
   // iOS Safari / Chrome autofill & keyboard collapse recovery
   useEffect(() => {
@@ -240,6 +245,15 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     capacityOrdersCount !== null &&
     capacityOrdersCount >= holidayRule.maxDailyOrders
   );
+
+  // Check if current selected product is sold out (either in catalog or via live status)
+  const isProductSoldOut = Boolean(
+    selectedProduct &&
+      (selectedProduct.inStock === false ||
+        liveStatus?.outOfStockProductIds?.includes(selectedProduct.id))
+  );
+
+  const [isCheckingStock, setIsCheckingStock] = useState(false);
 
   // Broad holiday delivery windows switch when holiday rule specifies peakSlots
   const configuredSlots: DeliveryTimeSlot[] = useMemo(() => {
@@ -567,9 +581,34 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     );
   }, [minTimeForExactInput, operatingEnd]);
 
-  const handleProceedToPayment = (e: React.FormEvent) => {
+  // Quick greeting card message suggestions (nullable / optional)
+  const quickCardPresets = useMemo(() => {
+    if (locale === "zh") {
+      return [
+        { id: "birthday", label: "🎂 生日快乐", text: "生日快乐" },
+        { id: "love", label: "❤️ 我爱你", text: "我爱你" },
+        { id: "congrats", label: "🎉 恭喜祝福", text: "恭喜祝福" },
+      ];
+    }
+    return [
+      { id: "birthday", label: "🎂 Happy Birthday", text: "Happy Birthday" },
+      { id: "love", label: "❤️ I Love You", text: "I Love You" },
+      { id: "congrats", label: "🎉 Congratulations", text: "Congratulations" },
+    ];
+  }, [locale]);
+
+  const handleProceedToPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
+
+    if (isProductSoldOut) {
+      setValidationError(
+        locale === "zh"
+          ? "抱歉，该花礼今日已售罄，无法提交订单。请返回选购其他精美花礼。"
+          : "We're sorry, this floral arrangement has sold out for today. Please choose another bouquet."
+      );
+      return;
+    }
 
     if (!customerDetails.name.trim()) {
       setValidationError(t("validationName"));
@@ -630,6 +669,39 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     if (fulfillmentMethod === "delivery" && !customerDetails.deliveryAddress.trim()) {
       setValidationError(t("validationAddress"));
       return;
+    }
+
+    // Real-time live check before proceeding to payment
+    if (store.slug && selectedProduct) {
+      try {
+        setIsCheckingStock(true);
+        const res = await fetch(
+          `/api/store/status?slug=${encodeURIComponent(store.slug)}&t=${Date.now()}`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
+        if (data.success && data.status) {
+          setLiveStatus(data.status);
+          onStatusChange?.(data.status);
+          const isLatestSoldOut = Boolean(
+            selectedProduct.inStock === false ||
+              data.status.outOfStockProductIds?.includes(selectedProduct.id)
+          );
+          if (isLatestSoldOut) {
+            setValidationError(
+              locale === "zh"
+                ? "抱歉，花艺师刚刚将该花礼标记为今日已售罄，无法提交此订单。请返回挑选其他心仪花礼。"
+                : "We're sorry, this floral arrangement was just marked sold out for today. Please choose another bouquet."
+            );
+            setIsCheckingStock(false);
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.warn("Live stock re-check skipped on network error:", checkErr);
+      } finally {
+        setIsCheckingStock(false);
+      }
     }
 
     // Record order in background so it appears live on the florist's mobile order book
@@ -726,7 +798,13 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
             <form onSubmit={handleProceedToPayment} className="space-y-4 pb-6">
               {/* Selected Product Strip */}
               {selectedProduct && (
-                <div className="flex items-center gap-3.5 rounded-2xl border border-stone-200/80 bg-white p-3 shadow-xs">
+                <div
+                  className={`flex items-center gap-3.5 rounded-2xl border p-3 shadow-xs transition-colors ${
+                    isProductSoldOut
+                      ? "border-rose-200 bg-rose-50/40"
+                      : "border-stone-200/80 bg-white"
+                  }`}
+                >
                   <button
                     type="button"
                     onClick={() => setShowProductImageModal(true)}
@@ -738,23 +816,43 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                       alt={selectedLocalized?.name || selectedProduct.name}
                       fill
                       sizes="64px"
-                      className="object-cover transition-transform duration-300 group-hover/thumb:scale-110"
+                      className={`object-cover transition-transform duration-300 group-hover/thumb:scale-110 ${
+                        isProductSoldOut ? "grayscale-35 opacity-75" : ""
+                      }`}
                     />
+                    {isProductSoldOut && (
+                      <div className="absolute inset-0 bg-stone-900/60 flex items-center justify-center p-1 text-center">
+                        <span className="text-[9px] font-bold text-white uppercase tracking-wider">
+                          {locale === "zh" ? "今日售罄" : "Sold Out"}
+                        </span>
+                      </div>
+                    )}
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover/thumb:opacity-100 transition-opacity">
                       <ZoomIn className="h-4 w-4 text-white" />
                     </div>
                   </button>
                   <div className="flex-1 min-w-0">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
-                      {t("selectedArrangement")}
-                    </span>
-                    <h4 className="truncate text-sm font-semibold text-stone-900 leading-snug">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+                        {t("selectedArrangement")}
+                      </span>
+                      {isProductSoldOut && (
+                        <span className="rounded bg-rose-100 px-1.5 py-0.2 text-[10px] font-bold text-rose-700 border border-rose-200">
+                          {locale === "zh" ? "今日已售罄" : "Sold Out Today"}
+                        </span>
+                      )}
+                    </div>
+                    <h4
+                      className={`truncate text-sm font-semibold leading-snug ${
+                        isProductSoldOut ? "text-stone-500 line-through" : "text-stone-900"
+                      }`}
+                    >
                       {selectedLocalized?.name || selectedProduct.name}
                     </h4>
                     <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
                       <span
-                        className="text-sm font-bold"
-                        style={{ color: primaryColor }}
+                        className={`text-sm font-bold ${isProductSoldOut ? "text-stone-400 line-through" : ""}`}
+                        style={!isProductSoldOut ? { color: primaryColor } : undefined}
                       >
                         {currency} {effectiveBouquetPrice.toFixed(2)}
                       </span>
@@ -1387,18 +1485,70 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                   </div>
                 )}
 
-                {/* Complimentary Card Message */}
-                <div className="relative">
-                  <Heart className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
-                  <textarea
-                    placeholder={t("cardMessagePlaceholder")}
-                    rows={2}
-                    value={customerDetails.cardMessage}
-                    onChange={(e) =>
-                      setCustomerDetails({ cardMessage: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
-                  />
+                {/* Complimentary Card Message (Nullable / Optional) */}
+                <div className="space-y-1.5">
+                  <div className="relative">
+                    <Heart className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
+                    <textarea
+                      placeholder={t("cardMessagePlaceholder")}
+                      rows={2}
+                      value={customerDetails.cardMessage}
+                      onChange={(e) =>
+                        setCustomerDetails({ cardMessage: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-8 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
+                    />
+                    {customerDetails.cardMessage && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomerDetails({ cardMessage: "" })}
+                        className="absolute top-2.5 right-2.5 rounded-full p-0.5 text-stone-400 hover:bg-stone-200 hover:text-stone-600 transition-colors cursor-pointer"
+                        title={locale === "zh" ? "清空留言" : "Clear message"}
+                        aria-label="Clear card message"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick Fill Preset Pills */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className="text-[11px] text-stone-400 shrink-0 select-none">
+                      {locale === "zh" ? "快捷填写：" : "Quick fill:"}
+                    </span>
+                    {quickCardPresets.map((preset) => {
+                      const isSelected = customerDetails.cardMessage === preset.text;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setCustomerDetails({ cardMessage: "" });
+                            } else {
+                              setCustomerDetails({ cardMessage: preset.text });
+                            }
+                          }}
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] transition-all cursor-pointer ${
+                            isSelected
+                              ? "font-semibold shadow-2xs"
+                              : "border border-stone-200/80 bg-stone-50/80 text-stone-600 hover:bg-stone-100/80 hover:border-stone-300"
+                          }`}
+                          style={
+                            isSelected
+                              ? {
+                                  borderColor: primaryColor,
+                                  backgroundColor: `${primaryColor}14`,
+                                  color: primaryColor,
+                                }
+                              : undefined
+                          }
+                        >
+                          <span>{preset.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -1484,17 +1634,63 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
 
               {/* Proceed to Payment Button */}
               <div className="pt-1">
+                {isProductSoldOut && (
+                  <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50/90 p-3 text-xs shadow-xs">
+                    <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-rose-900">
+                        {locale === "zh" ? "该花礼今日已售罄" : "This floral arrangement is sold out today"}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-rose-700 leading-relaxed">
+                        {locale === "zh"
+                          ? "花艺师今日该花材配额已用完，暂无法提交订单。请返回首页选购其他精美花礼。"
+                          : "Today's floral stem quota for this arrangement is fully booked. Please browse our other available bouquets."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  className="flex w-full items-center justify-between rounded-xl py-3 px-4 text-sm font-semibold text-white shadow-md transition-all active:scale-98 hover:opacity-95 cursor-pointer"
-                  style={{ backgroundColor: primaryColor }}
+                  disabled={isProductSoldOut || isCheckingStock}
+                  className={`flex w-full items-center justify-between rounded-xl py-3 px-4 text-sm font-semibold transition-all ${
+                    isProductSoldOut
+                      ? "bg-stone-200 text-stone-400 border border-stone-300/80 cursor-not-allowed shadow-none"
+                      : isCheckingStock
+                      ? "opacity-80 cursor-wait text-white shadow-md"
+                      : "text-white shadow-md active:scale-98 hover:opacity-95 cursor-pointer"
+                  }`}
+                  style={!isProductSoldOut ? { backgroundColor: primaryColor } : undefined}
                 >
-                  <span className="font-medium text-white/90">
-                    {t("proceedToPayment")}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {isCheckingStock ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-white" />
+                        <span className="font-medium text-white">
+                          {locale === "zh" ? "正在实时核验鲜花配额..." : "Verifying live stock quota..."}
+                        </span>
+                      </>
+                    ) : isProductSoldOut ? (
+                      <>
+                        <Ban className="h-4 w-4 text-stone-400" />
+                        <span className="font-semibold text-stone-500">
+                          {locale === "zh" ? "今日已售罄 • 无法提交订单" : "Sold Out Today • Cannot Order"}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="font-medium text-white/90">
+                        {t("proceedToPayment")}
+                      </span>
+                    )}
+                  </div>
+
                   <div className="flex items-center gap-1.5 font-bold">
-                    <span>{`${currency} ${grandTotal.toFixed(2)}`}</span>
-                    <ArrowRight className="h-4 w-4" />
+                    <span className={isProductSoldOut ? "text-stone-400 line-through text-xs" : ""}>
+                      {`${currency} ${grandTotal.toFixed(2)}`}
+                    </span>
+                    {!isProductSoldOut && !isCheckingStock && (
+                      <ArrowRight className="h-4 w-4" />
+                    )}
                   </div>
                 </button>
 

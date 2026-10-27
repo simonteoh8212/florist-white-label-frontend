@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Product, StoreConfig } from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
-import { ProductCard } from "@/components/ProductCard";
+import { ProductCard, ProductViewMode } from "@/components/ProductCard";
 import { CheckoutDrawer } from "@/components/CheckoutDrawer";
 import { ProductImageModal } from "@/components/ProductImageModal";
 import { StorePolicyModal } from "@/components/StorePolicyModal";
@@ -13,6 +13,7 @@ import { StorePausedAnnouncementModal } from "@/components/StorePausedAnnounceme
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTranslation } from "@/i18n/localeStore";
 import {
+  AlertCircle,
   ArrowUp,
   ArrowUpDown,
   Check,
@@ -20,6 +21,9 @@ import {
   Clock,
   ExternalLink,
   Heart,
+  LayoutGrid,
+  List,
+  Lock,
   MapPin,
   Phone,
   Search,
@@ -27,8 +31,6 @@ import {
   Sparkles,
   Truck,
   X,
-  AlertCircle,
-  Lock,
 } from "lucide-react";
 import { StoreEmergencyStatus } from "@/lib/storeStatus";
 
@@ -43,10 +45,13 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
   store,
   initialStatus,
 }) => {
-  const { t, getCategory } = useTranslation();
+  const { t, locale, getCategory } = useTranslation();
   const syncTenantStore = useCartStore((state) => state.syncTenantStore);
   const openCheckoutWithProduct = useCartStore(
     (state) => state.openCheckoutWithProduct
+  );
+  const isCheckoutDrawerOpen = useCartStore(
+    (state) => state.isCheckoutDrawerOpen
   );
 
   // Store Emergency & Capacity Status
@@ -71,6 +76,24 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
     };
     fetchStatus();
   }, [store.slug, initialStatus]);
+
+  // Synchronize storefront products when checkout drawer closes
+  const prevDrawerOpenRef = useRef(isCheckoutDrawerOpen);
+  useEffect(() => {
+    if (prevDrawerOpenRef.current && !isCheckoutDrawerOpen && store.slug) {
+      fetch(`/api/store/status?slug=${encodeURIComponent(store.slug)}&t=${Date.now()}`, {
+        cache: "no-store",
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.status) {
+            setStoreStatus(data.status);
+          }
+        })
+        .catch((e) => console.warn("Failed to refresh status on drawer close:", e));
+    }
+    prevDrawerOpenRef.current = isCheckoutDrawerOpen;
+  }, [isCheckoutDrawerOpen, store.slug]);
 
   // Dynamic staff orders link based on current domain:
   // If on subdomain (autarix.flowerapp.my or autarix.localhost), "/orders" goes to the order book.
@@ -101,6 +124,38 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
   const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
   const [showPolicyModal, setShowPolicyModal] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<ProductViewMode>("grid");
+  const [hideSoldOut, setHideSoldOut] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("florist_catalog_view");
+      if (saved === "grid" || saved === "list") {
+        setViewMode(saved);
+      }
+      const savedHideSoldOut = localStorage.getItem("florist_hide_sold_out");
+      if (savedHideSoldOut === "true") {
+        setHideSoldOut(true);
+      }
+    } catch {}
+  }, []);
+
+  const handleToggleViewMode = (mode: ProductViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("florist_catalog_view", mode);
+    } catch {}
+  };
+
+  const handleToggleHideSoldOut = () => {
+    setHideSoldOut((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("florist_hide_sold_out", String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Listen to window scroll to show/hide scroll-to-top button
   useEffect(() => {
@@ -177,13 +232,23 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
       list.sort((a, b) => a.price - b.price);
     }
 
-    return list;
-  }, [store.products, selectedCategory, searchQuery, sortOrder]);
+    if (hideSoldOut) {
+      list = list.filter((p) => {
+        const isSoldOut = Boolean(
+          p.inStock === false ||
+          storeStatus?.outOfStockProductIds?.includes(p.id)
+        );
+        return !isSoldOut;
+      });
+    }
 
-  // Reset pagination count whenever category, search query, or sort order changes
+    return list;
+  }, [store.products, selectedCategory, searchQuery, sortOrder, hideSoldOut, storeStatus?.outOfStockProductIds]);
+
+  // Reset pagination count whenever category, search query, sort order, or hideSoldOut changes
   useEffect(() => {
     setVisibleCount(DEFAULT_VISIBLE_COUNT);
-  }, [selectedCategory, searchQuery, sortOrder]);
+  }, [selectedCategory, searchQuery, sortOrder, hideSoldOut]);
 
   const displayedProducts = useMemo(() => {
     return filteredProducts.slice(0, visibleCount);
@@ -300,46 +365,48 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
           </div>
         </header>
 
-        {/* Hero Banner / Studio Introduction */}
-        <section className="relative px-4 pt-4 pb-2">
-          <div className="rounded-2xl bg-gradient-to-br from-stone-50 via-white to-stone-50 p-4 border border-stone-200/60 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
-              <Heart
-                className="h-3 w-3"
-                style={{ color: store.primaryColor, fill: store.primaryColor }}
-              />
-              <span>{t("artisanalCollection")}</span>
-            </div>
-            <h2 className="mt-1 text-lg font-bold text-stone-900 tracking-tight leading-snug">
-              {store.tagline || t("heroSubtitle")}
-            </h2>
-            <p className="mt-1 text-xs text-stone-600 leading-relaxed">
-              {t("heroDesc")}
-            </p>
+        {/* Hero Banner / Studio Introduction (Controlled by store.showHeroBanner, defaults to true) */}
+        {store.showHeroBanner !== false && (
+          <section className="relative px-4 pt-4 pb-2">
+            <div className="rounded-2xl bg-gradient-to-br from-stone-50 via-white to-stone-50 p-4 border border-stone-200/60 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                <Heart
+                  className="h-3 w-3"
+                  style={{ color: store.primaryColor, fill: store.primaryColor }}
+                />
+                <span>{t("artisanalCollection")}</span>
+              </div>
+              <h2 className="mt-1 text-lg font-bold text-stone-900 tracking-tight leading-snug">
+                {store.tagline || t("heroSubtitle")}
+              </h2>
+              <p className="mt-1 text-xs text-stone-600 leading-relaxed">
+                {t("heroDesc")}
+              </p>
 
-            {/* Micro Perks Strip */}
-            <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-stone-200/60 pt-3 text-center">
-              <div className="flex flex-col items-center gap-1">
-                <Truck className="h-4 w-4 text-stone-700" />
-                <span className="text-[10px] font-medium text-stone-600 leading-tight">
-                  {t("doorstepDelivery")}
-                </span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <Clock className="h-4 w-4 text-stone-700" />
-                <span className="text-[10px] font-medium text-stone-600 leading-tight">
-                  {t("selectedSlots")}
-                </span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                <span className="text-[10px] font-medium text-stone-600 leading-tight">
-                  {t("tngProof")}
-                </span>
+              {/* Micro Perks Strip */}
+              <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-stone-200/60 pt-3 text-center">
+                <div className="flex flex-col items-center gap-1">
+                  <Truck className="h-4 w-4 text-stone-700" />
+                  <span className="text-[10px] font-medium text-stone-600 leading-tight">
+                    {t("doorstepDelivery")}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <Clock className="h-4 w-4 text-stone-700" />
+                  <span className="text-[10px] font-medium text-stone-600 leading-tight">
+                    {t("selectedSlots")}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  <span className="text-[10px] font-medium text-stone-600 leading-tight">
+                    {t("tngProof")}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Instant Search Bar & Sorting (Sticky below header) */}
         <section className="sticky top-16 z-20 bg-white/95 px-4 py-2.5 backdrop-blur-md border-b border-stone-100/90 shadow-2xs transition-all">
@@ -535,10 +602,79 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
                   <X className="h-3 w-3 text-stone-400 hover:text-stone-700" />
                 </button>
               )}
+              {hideSoldOut && (
+                <button
+                  type="button"
+                  onClick={handleToggleHideSoldOut}
+                  className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/90 px-2 py-0.5 text-[10px] font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
+                  title={t("hideSoldOut")}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <span>{t("inStockOnly")}</span>
+                  <X className="h-3 w-3 text-emerald-600 hover:text-emerald-900" />
+                </button>
+              )}
             </div>
-            <span className="text-[11px] text-stone-500">
-              {t("pricesIn")} {currency}
-            </span>
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              {/* In-Stock Only Filter Toggle */}
+              <button
+                type="button"
+                onClick={handleToggleHideSoldOut}
+                aria-pressed={hideSoldOut}
+                title={hideSoldOut ? t("hideSoldOut") : t("inStockOnly")}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-[11px] font-semibold transition-all cursor-pointer border ${
+                  hideSoldOut
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs font-bold"
+                    : "bg-white text-stone-600 border-stone-200/80 hover:bg-stone-50 hover:border-stone-300"
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full transition-colors ${
+                    hideSoldOut
+                      ? "bg-emerald-500 ring-2 ring-emerald-200"
+                      : "bg-stone-300"
+                  }`}
+                />
+                <span className="whitespace-nowrap">{t("inStockOnly")}</span>
+              </button>
+              <span className="text-[11px] text-stone-500 hidden xs:inline">
+                {t("pricesIn")} {currency}
+              </span>
+
+              {/* View Mode Toggle: Grid (2 in a row) vs List (1 in a row) */}
+              <div className="flex items-center rounded-xl bg-stone-100 p-0.5 border border-stone-200/60 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => handleToggleViewMode("grid")}
+                  aria-label={t("viewGrid")}
+                  title={`${t("viewGrid")} (2 per row)`}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                    viewMode === "grid"
+                      ? "bg-white text-stone-900 shadow-2xs font-bold"
+                      : "text-stone-400 hover:text-stone-700"
+                  }`}
+                  style={viewMode === "grid" ? { color: store.primaryColor } : undefined}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{t("viewGrid")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleViewMode("list")}
+                  aria-label={t("viewList")}
+                  title={t("viewList")}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                    viewMode === "list"
+                      ? "bg-white text-stone-900 shadow-2xs font-bold"
+                      : "text-stone-400 hover:text-stone-700"
+                  }`}
+                  style={viewMode === "list" ? { color: store.primaryColor } : undefined}
+                >
+                  <List className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{t("viewList")}</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Empty Search State */}
@@ -551,30 +687,60 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
                 {t("noArrangements")}
               </h3>
               <p className="mt-1 text-xs text-stone-500 max-w-xs mx-auto">
-                {t("noArrangementsDesc", { query: searchQuery })}
+                {hideSoldOut
+                  ? (locale === "zh"
+                      ? "当前筛选下所有花礼均已售罄。您可以关闭“仅看有货”查看全部花礼。"
+                      : "All arrangements matching this view are currently sold out. Turn off 'In Stock' to view all items.")
+                  : t("noArrangementsDesc", { query: searchQuery })}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setSelectedCategory("All");
-                  setSortOrder("none");
-                }}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 transition-all cursor-pointer"
-              >
-                {t("clearSearchFilters")}
-              </button>
+              <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+                {hideSoldOut && (
+                  <button
+                    type="button"
+                    onClick={handleToggleHideSoldOut}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 transition-all cursor-pointer"
+                  >
+                    {locale === "zh" ? "显示全部花礼" : "Show All Arrangements"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedCategory("All");
+                    setSortOrder("none");
+                    setHideSoldOut(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-2xs hover:bg-stone-50 transition-all cursor-pointer"
+                >
+                  {t("clearSearchFilters")}
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {displayedProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  store={store}
-                  onViewImage={(p) => setPreviewProduct(p)}
-                />
-              ))}
+            <div
+              className={
+                viewMode === "grid"
+                  ? "grid grid-cols-2 gap-2.5 sm:gap-4"
+                  : "grid grid-cols-1 gap-3 sm:gap-3.5"
+              }
+            >
+              {displayedProducts.map((product) => {
+                const isSoldOut = Boolean(
+                  product.inStock === false ||
+                  storeStatus?.outOfStockProductIds?.includes(product.id)
+                );
+                return (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    store={store}
+                    isSoldOut={isSoldOut}
+                    viewMode={viewMode}
+                    onViewImage={(p) => setPreviewProduct(p)}
+                  />
+                );
+              })}
             </div>
           )}
 
@@ -733,12 +899,22 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
           isOpen={Boolean(previewProduct)}
           product={previewProduct}
           store={store}
+          isSoldOut={Boolean(
+            previewProduct && (
+              previewProduct.inStock === false ||
+              storeStatus?.outOfStockProductIds?.includes(previewProduct.id)
+            )
+          )}
           onClose={() => setPreviewProduct(null)}
           onOrderNow={(product) => openCheckoutWithProduct(product, store)}
         />
 
         {/* Root Level Mounted Checkout Drawer for this Store */}
-        <CheckoutDrawer store={store} storeStatus={storeStatus} />
+        <CheckoutDrawer
+          store={store}
+          storeStatus={storeStatus}
+          onStatusChange={setStoreStatus}
+        />
 
         {/* Store Paused & Non-Operating Announcement Pop-up Modal */}
         <StorePausedAnnouncementModal store={store} storeStatus={storeStatus} />

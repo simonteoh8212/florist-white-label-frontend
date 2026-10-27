@@ -6,6 +6,7 @@ export interface Product {
   image: string;
   category: string;
   tag?: string;
+  inStock?: boolean;
 
   // Optional Chinese localization
   nameZh?: string;
@@ -137,6 +138,9 @@ export interface StoreConfig {
 
   // Dynamic Gift Add-ons (Balloons, lights, chocolates, cards)
   addons?: StoreAddon[];
+
+  // Storefront layout options
+  showHeroBanner?: boolean; // Defaults to true; set false to hide Hero Banner / Studio Introduction
 
   // Multi-language localization configuration (per-tenant switch)
   enableLanguageSelector?: boolean; // Defaults to true; set false to hide switcher

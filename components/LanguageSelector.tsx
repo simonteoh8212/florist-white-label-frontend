@@ -141,7 +141,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
       {isOpen && (
         <div className="absolute right-0 top-full mt-1.5 z-50 w-36 rounded-2xl border border-stone-200/90 bg-white p-1 shadow-xl shadow-stone-900/10 backdrop-blur-lg animate-in fade-in zoom-in-95 duration-150">
           <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-400 whitespace-nowrap">
-            Language / \u8BED\u8A00
+            Language
           </div>
           <div className="space-y-0.5">
             {languages.map((lang) => {
