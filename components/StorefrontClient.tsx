@@ -677,10 +677,11 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
         </section>
 
         {/* Category Filter Pills */}
-        <section className="px-4 py-2">
+        <section className="px-4 py-2 w-full overflow-hidden">
           <div
             ref={chipsContainerRef}
-            className="chips-row no-scrollbar relative flex items-center gap-1.5 overflow-x-auto pb-1"
+            className="chips-row no-scrollbar relative flex w-full items-center gap-1.5 overflow-x-auto overflow-y-hidden whitespace-nowrap touch-pan-x overscroll-x-contain pb-1 select-none"
+            style={{ touchAction: "pan-x" }}
           >
             {/* Sliding Pill */}
             <div
@@ -699,11 +700,12 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
                   key={cat}
                   type="button"
                   onClick={(e) => handleSelectCategory(cat, e)}
-                  className={`category-chip rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap cursor-pointer ${
+                  className={`category-chip shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap cursor-pointer touch-pan-x select-none ${
                     isActive
                       ? "is-active font-bold shadow-2xs"
                       : "bg-stone-100 text-stone-600 hover:bg-stone-200/80"
                   }`}
+                  style={{ touchAction: "pan-x" }}
                 >
                   {cat === "All" ? t("allCategories") : getCategory(cat)}
                 </button>
