@@ -212,6 +212,135 @@ export function getProductLocalized(
   };
 }
 
+/**
+ * Parses a time string (e.g. "7:00 PM", "07:00 PM", "7 PM", "19:00", "09:30")
+ * into total minutes from midnight (0 - 1439).
+ */
+export function parseTimeStringToMinutes(str: string): number | null {
+  if (!str) return null;
+  const trimmed = str.trim();
+  // 12-hour format: "7:00 PM", "7 PM", "07:00 AM"
+  const m12 = trimmed.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+  if (m12) {
+    let h = parseInt(m12[1], 10);
+    const m = m12[2] ? parseInt(m12[2], 10) : 0;
+    const isPM = m12[3].toUpperCase() === "PM";
+    if (isPM && h < 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  // 24-hour format: "19:00", "09:30"
+  const m24 = trimmed.match(/(\d{1,2}):(\d{2})/);
+  if (m24) {
+    const h = parseInt(m24[1], 10);
+    const m = parseInt(m24[2], 10);
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) return h * 60 + m;
+  }
+  return null;
+}
+
+/**
+ * Parses a delivery slot range string into { startMinutes, endMinutes }.
+ * Supports:
+ * - "7:00 PM – 8:00 PM" (en-dash)
+ * - "7:00 PM - 8:00 PM" (hyphen)
+ * - "Morning Peak (09:00 AM – 01:00 PM)"
+ * - "19:00"
+ */
+export function parseSlotRange(
+  slotStr: string
+): { startMinutes: number; endMinutes: number } | null {
+  if (!slotStr) return null;
+  const splitRegex = /[\u2013\u2014\-]|(?:\bto\b)/i;
+  const parts = slotStr.split(splitRegex);
+  const startMinutes = parseTimeStringToMinutes(parts[0]);
+  if (startMinutes === null) return null;
+  const endPart = parts.slice(1).join(" ");
+  const endMinutes = endPart ? parseTimeStringToMinutes(endPart) : null;
+  return {
+    startMinutes,
+    endMinutes: endMinutes !== null ? endMinutes : startMinutes + 60,
+  };
+}
+
+/**
+ * Checks whether a given delivery date and slot qualifies as a Same-Day Rush Order.
+ *
+ * An order is a rush order if:
+ * 1. The target date is today (Asia/Kuala_Lumpur).
+ * 2. Current time is already inside the slot window (e.g. 5:15 PM inside 5:00 - 6:00 PM),
+ *    OR the slot starts within `thresholdMinutes` (e.g. 45 mins).
+ */
+export function checkIfSlotIsRush(
+  targetDate: string,
+  targetSlot: string,
+  thresholdMinutes: number = 45,
+  slotsConfig?: DeliveryTimeSlot[]
+): boolean {
+  if (!targetDate || !targetSlot) return false;
+
+  // 1. Must be today in Malaysia Time (Asia/Kuala_Lumpur)
+  const now = new Date();
+  const todayStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kuala_Lumpur",
+  }).format(now);
+
+  if (targetDate !== todayStr) {
+    return false; // Future or past dates are never same-day rush
+  }
+
+  // 2. Current time in minutes from midnight (in Asia/Kuala_Lumpur)
+  const klParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kuala_Lumpur",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+
+  const curHour = parseInt(klParts.find((p) => p.type === "hour")?.value || "0", 10);
+  const curMin = parseInt(klParts.find((p) => p.type === "minute")?.value || "0", 10);
+  const currentTotalMinutes = curHour * 60 + curMin;
+
+  // 3. Match against configured slots if provided
+  if (slotsConfig && slotsConfig.length > 0) {
+    const matched = slotsConfig.find((s) => {
+      const labelWithHours = s.hours ? `${s.label} (${s.hours})` : s.label;
+      return (
+        s.label === targetSlot ||
+        labelWithHours === targetSlot ||
+        s.id === targetSlot
+      );
+    });
+    if (matched) {
+      const startHour = matched.cutoffHour - 1;
+      const startMinutes = startHour * 60;
+      const endMinutes = matched.cutoffHour * 60 + (matched.cutoffMinute ?? 0);
+
+      if (currentTotalMinutes >= startMinutes && currentTotalMinutes < endMinutes) {
+        return true;
+      }
+      if (startMinutes > currentTotalMinutes && startMinutes - currentTotalMinutes <= thresholdMinutes) {
+        return true;
+      }
+      return false;
+    }
+  }
+
+  // 4. Fallback: Parse from time string
+  const range = parseSlotRange(targetSlot);
+  if (range) {
+    if (currentTotalMinutes >= range.startMinutes && currentTotalMinutes < range.endMinutes) {
+      return true;
+    }
+    if (range.startMinutes > currentTotalMinutes && range.startMinutes - currentTotalMinutes <= thresholdMinutes) {
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
 // Modular Tenant Stores Data (Loaded from dedicated stores.data.ts)
 import { STORES } from "./stores.data";
 export { STORES };

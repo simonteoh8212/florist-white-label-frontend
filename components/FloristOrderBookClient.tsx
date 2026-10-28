@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { StoreConfig } from "@/config/stores";
+import { StoreConfig, checkIfSlotIsRush } from "@/config/stores";
 import { Order, FulfillmentStatus } from "@/lib/orders";
 import {
   Lock,
@@ -463,7 +463,31 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
 
   // Detect rush orders
   const isRushOrder = (order: Order) => {
-    return Boolean(order.notes && (order.notes.includes("Rush") || order.notes.includes("加急")));
+    // 1. Must be scheduled for today (future or past dates are never same-day rush)
+    if (order.deliveryDate !== todayStr) {
+      return false;
+    }
+
+    // 2. Must have had rush marked in notes
+    const hasRushTag = Boolean(
+      order.notes &&
+        (order.notes.includes("Rush") || order.notes.includes("加急"))
+    );
+    if (!hasRushTag) {
+      return false;
+    }
+
+    // 3. If the order was rescheduled, re-check against the rescheduled slot!
+    if (order.notes && order.notes.includes("[Rescheduled:")) {
+      return checkIfSlotIsRush(
+        order.deliveryDate,
+        order.deliveryTimeSlot,
+        store.deliveryTimeConfig?.rushThresholdMinutes ?? 45,
+        store.deliveryTimeConfig?.slots
+      );
+    }
+
+    return true;
   };
 
   const openRescheduleModal = (order: Order) => {
@@ -542,10 +566,34 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     try {
       const currentOrder = orders.find((o) => o.id === rescheduleState.orderId);
       const existingNotes = currentOrder?.notes || "";
-      const rescheduleAudit = `[Rescheduled: ${rescheduleState.deliveryDate} ${targetSlot}]`;
-      const updatedNotes = existingNotes
-        ? `${existingNotes} ${rescheduleAudit}`
-        : rescheduleAudit;
+      const isNewSlotRush = checkIfSlotIsRush(
+        rescheduleState.deliveryDate,
+        targetSlot,
+        store.deliveryTimeConfig?.rushThresholdMinutes ?? 45,
+        store.deliveryTimeConfig?.slots
+      );
+
+      // Clean existing notes from old Rush tag and old Rescheduled audit tags
+      const cleanNotes = existingNotes
+        .replace(
+          /\[\s*(?:⚡\s*)?(?:Same-Day\s+Rush\s+Slot|Rush\s+Slot|加急(?:派送|订单)?)\s*\]/gi,
+          ""
+        )
+        .replace(/\[Rescheduled:[^\]]+\]/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+
+      const noteTags: string[] = [];
+      if (isNewSlotRush) {
+        noteTags.push("[⚡ Same-Day Rush Slot]");
+      }
+      noteTags.push(
+        `[Rescheduled: ${rescheduleState.deliveryDate} ${targetSlot}]`
+      );
+
+      const updatedNotes = cleanNotes
+        ? `${noteTags.join(" ")} ${cleanNotes}`
+        : noteTags.join(" ");
 
       const res = await fetch("/api/orders", {
         method: "PATCH",
@@ -574,7 +622,11 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               : o
           )
         );
-        showToast(`Slot updated to ${rescheduleState.deliveryDate} (${targetSlot})`);
+        showToast(
+          isNewSlotRush
+            ? `Slot updated to ${rescheduleState.deliveryDate} (${targetSlot}) • ⚡ Rush Order`
+            : `Slot updated to ${rescheduleState.deliveryDate} (${targetSlot})`
+        );
         setRescheduleState(null);
       } else {
         showToast(data.error || "Failed to update delivery slot");
@@ -772,7 +824,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
         fulfillmentMethod: isPickup ? "pickup" : "delivery",
         deliveryZoneName: isPickup ? undefined : zoneObj?.name,
         deliveryFee: quickDeliveryFee,
-        deliveryDate: quickDate || todayStr,
+        deliveryDate: effectiveDate,
         deliveryTimeSlot: isTakeaway ? "Immediate Takeaway" : quickSlot || "Standard Slot",
         recipient: {
           name:
@@ -786,11 +838,22 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           deliveryAddress: isPickup ? undefined : quickDeliveryAddress.trim(),
         },
         cardMessage: quickCardMessage.trim(),
-        notes: quickNotes.trim()
-          ? quickNotes.trim()
-          : isTakeaway
-          ? "Immediate counter takeaway"
-          : "",
+        notes: (() => {
+          const slot = isTakeaway ? "Immediate Takeaway" : quickSlot || "Standard Slot";
+          const isRush =
+            !isTakeaway &&
+            checkIfSlotIsRush(
+              effectiveDate,
+              slot,
+              store.deliveryTimeConfig?.rushThresholdMinutes ?? 45,
+              store.deliveryTimeConfig?.slots
+            );
+          const rawNote = quickNotes.trim();
+          if (isRush) {
+            return rawNote ? `[⚡ Same-Day Rush Slot] ${rawNote}` : "[⚡ Same-Day Rush Slot]";
+          }
+          return rawNote || (isTakeaway ? "Immediate counter takeaway" : "");
+        })(),
         totalAmount: quickOrderTotal,
         paymentMode: quickPaymentMode,
         paymentStatus:
@@ -2514,6 +2577,43 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                       className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
                     />
                   </div>
+
+                  {/* Dynamic Rush Status Impact Indicator */}
+                  {(() => {
+                    const isProposedSlotRush = checkIfSlotIsRush(
+                      rescheduleState.deliveryDate,
+                      effectiveSlot,
+                      store.deliveryTimeConfig?.rushThresholdMinutes ?? 45,
+                      store.deliveryTimeConfig?.slots
+                    );
+                    return (
+                      <div className="mt-2.5">
+                        {isProposedSlotRush ? (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs">
+                            <Zap className="h-4 w-4 text-amber-600 fill-amber-500 shrink-0" />
+                            <div>
+                              <span className="font-bold">⚡ Same-Day Rush Slot:</span>{" "}
+                              <span className="text-amber-900">
+                                Starts within {store.deliveryTimeConfig?.rushThresholdMinutes ?? 45} mins. Rush badge will remain active.
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs">
+                            <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <div>
+                              <span className="font-bold">Standard Delivery Window:</span>{" "}
+                              <span className="text-emerald-900">
+                                {isRushOrder(targetOrder)
+                                  ? "Lead time exceeds 45 mins. Saving will clear Rush Order status."
+                                  : "Provides sufficient advance lead time for florist preparation."}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Step 3: Polite WhatsApp Proposal Preview */}
