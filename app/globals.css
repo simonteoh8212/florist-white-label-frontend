@@ -89,6 +89,14 @@
   transition: color 0.25s ease, background-color 0.25s ease;
 }
 
+/* Expanded vertical touch target for mobile thumb ergonomics */
+.category-chip::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+  border-radius: 9999px;
+}
+
 .category-chip.is-active {
   color: #ffffff !important;
   background-color: transparent !important;
@@ -280,6 +288,14 @@
 .heart.on {
   color: var(--brand);
   animation: pop 0.45s cubic-bezier(0.3, 1.8, 0.5, 1);
+}
+
+/* Expanded invisible tap target for Apple 44pt touch standard */
+.heart::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
 }
 
 /* ==========================================================================
@@ -491,6 +507,7 @@
 }
 
 .qty button {
+  position: relative;
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -504,6 +521,14 @@
   cursor: pointer;
   border: 1px solid var(--line);
   color: var(--ink);
+}
+
+/* Expanded invisible tap target for Apple 44pt touch standard */
+.qty button::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
 }
 
 .qty button:active {

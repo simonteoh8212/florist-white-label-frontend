@@ -552,10 +552,11 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer"
+                  className="absolute right-1.5 flex h-9 w-9 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer"
                   aria-label={t("clearSearch")}
                 >
                   <X className="h-3.5 w-3.5" />
+                  <span className="absolute -inset-1 rounded-full" aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -787,13 +788,14 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
                   onClick={() => handleToggleViewMode("grid")}
                   aria-label={t("viewGrid")}
                   title={`${t("viewGrid")} (2 per row)`}
-                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                  className={`relative flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-all cursor-pointer ${
                     viewMode === "grid"
                       ? "bg-white text-stone-900 shadow-2xs font-bold"
                       : "text-stone-400 hover:text-stone-700"
                   }`}
                   style={viewMode === "grid" ? { color: store.primaryColor } : undefined}
                 >
+                  <span className="absolute -inset-1 rounded-lg" aria-hidden="true" />
                   <LayoutGrid className="h-5.5 w-5.5" />
                   <span className="hidden sm:inline">{t("viewGrid")}</span>
                 </button>
@@ -802,13 +804,14 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
                   onClick={() => handleToggleViewMode("list")}
                   aria-label={t("viewList")}
                   title={t("viewList")}
-                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                  className={`relative flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-all cursor-pointer ${
                     viewMode === "list"
                       ? "bg-white text-stone-900 shadow-2xs font-bold"
                       : "text-stone-400 hover:text-stone-700"
                   }`}
                   style={viewMode === "list" ? { color: store.primaryColor } : undefined}
                 >
+                  <span className="absolute -inset-1 rounded-lg" aria-hidden="true" />
                   <List className="h-5.5 w-5.5" />
                   <span className="hidden sm:inline">{t("viewList")}</span>
                 </button>

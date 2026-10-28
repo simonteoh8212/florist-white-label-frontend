@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "import-products": "node scripts/import-products.mjs",
-    "generate-agreement-pdf": "node scripts/generate-agreement-pdf.mjs"
+    "generate-agreement-pdf": "node scripts/generate-agreement-pdf.mjs",
+    "generate-features-pdf": "node scripts/generate-features-pdf.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -77,9 +77,16 @@ function parseArgs() {
   return options;
 }
 
-// Robust CSV parser supporting commas inside quotes and escaped quotes
+// Robust CSV parser supporting commas inside quotes, escaped quotes, UTF-8 BOM, and comments
 function parseCSV(text) {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  // Strip UTF-8 BOM (Byte Order Mark) if created by Excel
+  const cleanText = (text || "").replace(/^\uFEFF/, "");
+  const lines = cleanText
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim();
+      return trimmed.length > 0 && !trimmed.startsWith("#");
+    });
   if (lines.length === 0) return { headers: [], rows: [] };
 
   function parseLine(line) {
@@ -176,13 +183,18 @@ Arguments:
   --help, -h       Display this help message
 
 Expected CSV Columns:
-  - name         (Required) Product arrangement title
-  - price        (Required) Numeric price (e.g. 168 or RM 168)
-  - category     (Optional) Category tab (e.g. Birthday, Romance, Vase)
-  - description  (Optional) Product story or details
-  - image        (Optional) File name in /public/stores/<slug>/ or external URL
-  - tag          (Optional) Highlight pill (e.g. Best Seller, Popular)
-  - id           (Optional) Custom product id (auto-generated if omitted)
+  - name / title        (Required) Product arrangement title
+  - price               (Required) Numeric price (e.g. 168 or RM 168)
+  - category            (Optional) Category tab (e.g. Birthday, Romance, Vase)
+  - description         (Optional) Product story or details
+  - image               (Optional) File name in /public/stores/<slug>/ or external URL
+  - tag                 (Optional) Highlight pill (e.g. Best Seller, Popular)
+  - name_zh             (Optional) Chinese arrangement title
+  - category_zh         (Optional) Chinese category tab
+  - tag_zh              (Optional) Chinese tag pill
+  - description_zh      (Optional) Chinese description
+  - in_stock            (Optional) true / false (defaults to true)
+  - id                  (Optional) Custom product id (auto-generated if omitted)
 
 Example:
   node scripts/import-products.mjs --store=autarix --file=./autarix_100_items.csv
@@ -273,6 +285,24 @@ async function run() {
 
     if (tag) {
       productObj.tag = tag;
+    }
+
+    const nameZh = (row.name_zh || row.namezh || row.chinesename || "").trim();
+    if (nameZh) productObj.nameZh = nameZh;
+
+    const descriptionZh = (row.description_zh || row.descriptionzh || row.details_zh || "").trim();
+    if (descriptionZh) productObj.descriptionZh = descriptionZh;
+
+    const categoryZh = (row.category_zh || row.categoryzh || "").trim();
+    if (categoryZh) productObj.categoryZh = categoryZh;
+
+    const tagZh = (row.tag_zh || row.tagzh || "").trim();
+    if (tagZh) productObj.tagZh = tagZh;
+
+    const rawStock = row.in_stock ?? row.instock;
+    if (rawStock !== undefined && rawStock !== "") {
+      const stockStr = String(rawStock).toLowerCase().trim();
+      productObj.inStock = stockStr !== "false" && stockStr !== "0" && stockStr !== "no";
     }
 
     newProducts.push(productObj);

@@ -96,7 +96,7 @@ export const StorePolicyModal: React.FC<StorePolicyModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-stone-400 hover:bg-stone-100 hover:text-stone-700 shadow-2xs transition-colors cursor-pointer"
+              className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-white text-stone-400 hover:bg-stone-100 hover:text-stone-700 shadow-2xs transition-colors cursor-pointer"
               aria-label="Close modal"
             >
               <X className="h-4 w-4" />

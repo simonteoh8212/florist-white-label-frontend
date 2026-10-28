@@ -924,16 +924,16 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   // ==========================================
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#0F172A] text-stone-100 flex flex-col justify-between px-4 py-8 max-w-md mx-auto relative select-none">
+      <div className="min-h-screen bg-[#FAF8F5] text-stone-900 flex flex-col justify-between px-4 py-8 max-w-md mx-auto relative select-none sm:my-8 sm:rounded-3xl sm:border sm:border-stone-200/80 sm:shadow-2xl sm:shadow-stone-200/60 sm:overflow-hidden">
         {/* Background ambient glow */}
         <div
-          className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full blur-3xl opacity-20 pointer-events-none"
+          className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full blur-3xl opacity-15 pointer-events-none"
           style={{ backgroundColor: primaryColor }}
         />
 
         {/* Top Header */}
         <div className="relative text-center pt-4">
-          <div className="mx-auto h-16 w-16 relative rounded-2xl bg-white/10 p-2.5 backdrop-blur-md border border-white/10 shadow-xl flex items-center justify-center">
+          <div className="mx-auto h-16 w-16 relative rounded-2xl bg-white p-2.5 shadow-md shadow-stone-200/60 border border-stone-200/80 flex items-center justify-center">
             <Image
               src={store.logo}
               alt={store.name}
@@ -942,15 +942,15 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               className="object-contain"
             />
           </div>
-          <h1 className="mt-3 text-lg font-bold tracking-tight text-white">
+          <h1 className="mt-3 text-lg font-extrabold tracking-tight text-stone-900">
             {store.name}
           </h1>
-          <p className="text-xs text-stone-400">
+          <p className="text-xs text-stone-500 font-medium">
             Florist Staff Dispatch & Order Book
           </p>
 
-          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[11px] text-stone-300">
-            <Lock className="h-3 w-3 text-stone-400" />
+          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white border border-stone-200/80 px-3 py-1 text-[11px] font-semibold text-stone-700 shadow-2xs">
+            <Lock className="h-3 w-3 text-stone-500" />
             <span>Enter 4-Digit Staff PIN</span>
           </div>
         </div>
@@ -965,12 +965,12 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                   key={index}
                   className={`h-4 w-4 rounded-full transition-all duration-200 ${
                     isFilled
-                      ? "scale-110 shadow-md"
-                      : "border border-white/30 bg-transparent"
+                      ? "scale-110 shadow-sm"
+                      : "border-2 border-stone-300 bg-white/80 shadow-2xs"
                   }`}
                   style={{
-                    backgroundColor: isFilled ? primaryColor : "transparent",
-                    borderColor: isFilled ? primaryColor : "rgba(255,255,255,0.3)",
+                    backgroundColor: isFilled ? primaryColor : undefined,
+                    borderColor: isFilled ? primaryColor : undefined,
                   }}
                 />
               );
@@ -978,20 +978,20 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           </div>
 
           {isLocked ? (
-            <div className="mt-4 flex items-center gap-2 rounded-xl bg-rose-500/15 border border-rose-500/30 px-3.5 py-2 text-xs font-semibold text-rose-300 animate-pulse">
-              <Clock className="h-4 w-4 text-rose-400 shrink-0" />
+            <div className="mt-4 flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200/80 px-3.5 py-2 text-xs font-semibold text-rose-700 shadow-2xs animate-pulse">
+              <Clock className="h-4 w-4 text-rose-500 shrink-0" />
               <span>Terminal locked. Try again in {formatCountdown(lockoutRemaining)}</span>
             </div>
           ) : authError ? (
-            <div className="mt-4 flex items-center gap-1.5 text-xs text-rose-400 font-medium animate-shake text-center px-4">
+            <div className="mt-4 flex items-center gap-1.5 text-xs text-rose-600 font-semibold animate-shake text-center px-4 bg-rose-50/80 border border-rose-200/60 rounded-xl py-1.5 shadow-2xs">
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               <span>{authError}</span>
             </div>
           ) : null}
 
           {isVerifying && !isLocked && (
-            <div className="mt-4 flex items-center gap-2 text-xs text-stone-400">
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            <div className="mt-4 flex items-center gap-2 text-xs text-stone-500 font-medium">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin text-stone-600" />
               <span>Verifying PIN...</span>
             </div>
           )}
@@ -1005,7 +1005,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               type="button"
               disabled={isLocked || isVerifying}
               onClick={() => handlePinDigit(num)}
-              className="h-16 rounded-2xl bg-white/5 hover:bg-white/15 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center text-2xl font-semibold text-white border border-white/5 shadow-sm cursor-pointer"
+              className="h-16 rounded-2xl bg-white hover:bg-stone-50 active:bg-stone-100 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center text-2xl font-bold text-stone-800 border border-stone-200/80 shadow-xs hover:shadow-sm cursor-pointer"
             >
               {num}
             </button>
@@ -1015,7 +1015,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             type="button"
             disabled={isLocked || isVerifying}
             onClick={handlePinClear}
-            className="h-16 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center text-xs font-bold text-stone-400 border border-white/5 uppercase tracking-wider cursor-pointer"
+            className="h-16 rounded-2xl bg-stone-100/80 hover:bg-stone-200/80 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center text-xs font-bold text-stone-500 hover:text-stone-800 border border-stone-200/80 uppercase tracking-wider cursor-pointer shadow-2xs"
           >
             Clear
           </button>
@@ -1024,7 +1024,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             type="button"
             disabled={isLocked || isVerifying}
             onClick={() => handlePinDigit("0")}
-            className="h-16 rounded-2xl bg-white/5 hover:bg-white/15 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center text-2xl font-semibold text-white border border-white/5 shadow-sm cursor-pointer"
+            className="h-16 rounded-2xl bg-white hover:bg-stone-50 active:bg-stone-100 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center text-2xl font-bold text-stone-800 border border-stone-200/80 shadow-xs hover:shadow-sm cursor-pointer"
           >
             0
           </button>
@@ -1033,7 +1033,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             type="button"
             disabled={isLocked || isVerifying}
             onClick={handlePinBackspace}
-            className="h-16 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center text-stone-400 hover:text-white border border-white/5 cursor-pointer disabled:opacity-30"
+            className="h-16 rounded-2xl bg-stone-100/80 hover:bg-stone-200/80 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center text-stone-500 hover:text-stone-800 border border-stone-200/80 cursor-pointer shadow-2xs"
             aria-label="Backspace"
           >
             <X className="h-5 w-5" />
@@ -1044,7 +1044,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
         <div className="text-center pt-2">
           <Link
             href={storefrontHref}
-            className="inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-500 hover:text-stone-800 transition-colors py-1 px-3 rounded-full hover:bg-stone-200/50"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>Return to Public Customer Store</span>

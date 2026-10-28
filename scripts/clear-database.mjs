@@ -1,14 +1,7 @@
 import fs from "fs";
 import path from "path";
 
-// 1. Clear local data/orders.json
-const dataFile = path.join(process.cwd(), "data", "orders.json");
-if (fs.existsSync(dataFile)) {
-  fs.writeFileSync(dataFile, "[]\n", "utf-8");
-  console.log("✓ Cleared local data/orders.json");
-}
-
-// 2. Read .env for Supabase
+// Read .env for Supabase credentials
 const envPath = path.join(process.cwd(), ".env");
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, "utf-8");
@@ -26,7 +19,7 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes("your-project-id")) {
@@ -49,6 +42,8 @@ if (SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes("your-project-id")) {
   } catch (err) {
     console.error("✗ Error clearing Supabase orders:", err.message);
   }
+} else {
+  console.warn("⚠️ Supabase credentials not found or unconfigured in .env.");
 }
 
-console.log("\n🧹 Done! All orders have been wiped clean.");
+console.log("\n🧹 Done! Supabase orders have been wiped clean.");

@@ -121,11 +121,12 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-stone-200/90 bg-stone-50/90 hover:bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-700 shadow-2xs transition-all active:scale-95 cursor-pointer hover:border-stone-300 whitespace-nowrap shrink-0"
+        className="relative inline-flex h-8 items-center gap-1.5 rounded-full border border-stone-200/90 bg-stone-50/90 hover:bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-700 shadow-2xs transition-all active:scale-95 cursor-pointer hover:border-stone-300 whitespace-nowrap shrink-0"
         aria-label={`Current language: ${currentLang.label}. Click to switch language.`}
         aria-haspopup="true"
         aria-expanded={isOpen}
       >
+        <span className="absolute -inset-y-1.5 -inset-x-1 rounded-full pointer-events-auto" aria-hidden="true" />
         {currentLang.renderFlag()}
         <span className="text-[11px] font-bold text-stone-800 whitespace-nowrap">
           {currentLang.short}

@@ -102,7 +102,7 @@ export const FavouritesDrawer: React.FC<FavouritesDrawerProps> = ({
             <button
               type="button"
               onClick={closeFavourites}
-              className="rounded-full p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-stone-800"
+              className="relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-stone-800"
               aria-label="Close"
             >
               <X className="h-4 w-4" />

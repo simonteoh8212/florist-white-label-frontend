@@ -256,7 +256,7 @@ export function StorePausedAnnouncementModal({
         <button
           type="button"
           onClick={handleDismiss}
-          className="absolute top-4 right-4 h-8 w-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-800 transition-colors flex items-center justify-center cursor-pointer shadow-2xs z-10"
+          className="absolute top-3.5 right-3.5 h-10 w-10 sm:h-11 sm:w-11 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-800 transition-colors flex items-center justify-center cursor-pointer shadow-2xs z-10"
           aria-label="Close Announcement"
         >
           <X className="h-4 w-4" />

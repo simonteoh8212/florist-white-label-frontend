@@ -77,7 +77,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
           type="button"
           onClick={onClose}
           aria-label={t("closeFullPicture")}
-          className="absolute top-3.5 right-3.5 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white/90 border border-white/20 backdrop-blur-md transition-all hover:bg-black/80 hover:text-white hover:scale-105 active:scale-95 cursor-pointer shadow-md"
+          className="absolute top-3.5 right-3.5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white/90 border border-white/20 backdrop-blur-md transition-all hover:bg-black/80 hover:text-white hover:scale-105 active:scale-95 cursor-pointer shadow-md"
         >
           <X className="h-5 w-5" />
         </button>
@@ -102,7 +102,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
               </span>
             )}
             {product.category && (
-              <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white border border-white/10 backdrop-blur-md">
+              <span className="flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white border border-white/10 backdrop-blur-md">
                 {getCategory(product.category)}
               </span>
             )}

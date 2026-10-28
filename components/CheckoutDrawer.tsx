@@ -873,7 +873,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
               <button
                 type="button"
                 onClick={handleClose}
-                className="rounded-full p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer"
+                className="relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer"
                 aria-label={t("closeDrawer")}
               >
                 <X className="h-4 w-4" />
@@ -954,8 +954,11 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                     </h4>
                     <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
                       <span
-                        className={`text-sm font-bold ${isProductSoldOut ? "text-stone-400 line-through" : ""}`}
-                        style={!isProductSoldOut ? { color: primaryColor } : undefined}
+                        className={`text-sm font-bold tabular-nums ${isProductSoldOut ? "text-stone-400 line-through" : ""}`}
+                        style={{
+                          color: !isProductSoldOut ? primaryColor : undefined,
+                          fontVariantNumeric: "tabular-nums",
+                        }}
                       >
                         {currency} {effectiveBouquetPrice.toFixed(2)}
                       </span>
@@ -993,21 +996,22 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
               {/* Enhance Your Gift (Add-ons section) */}
               {availableAddons.length > 0 && (
                 <div className="rounded-2xl border border-stone-200/80 bg-white p-3.5 shadow-xs space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
-                        <Sparkles className="h-3.5 w-3.5" style={{ color: primaryColor }} />
+                        <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: primaryColor }} />
                         <span>{t("enhanceYourGift")}</span>
                       </label>
-                      <p className="text-[10px] text-stone-500 mt-0.5">
+                      <p className="text-[10px] text-stone-500 mt-0.5 leading-snug">
                         {t("enhanceYourGiftSubtitle")}
                       </p>
                     </div>
                     {selectedAddonIds.length > 0 && (
                       <span
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                        className="shrink-0 whitespace-nowrap text-[10px] font-bold px-2.5 py-1 rounded-full border shadow-2xs leading-none"
                         style={{
                           backgroundColor: `${primaryColor}14`,
+                          borderColor: `${primaryColor}30`,
                           color: primaryColor,
                         }}
                       >
@@ -1779,7 +1783,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
 
                 <div className="flex items-center justify-between border-t border-stone-200/70 pt-2 text-sm font-bold text-stone-900">
                   <span>{t("orderTotal")}</span>
-                  <span className="text-base" style={{ color: primaryColor }}>
+                  <span className="text-base tabular-nums" style={{ color: primaryColor, fontVariantNumeric: "tabular-nums" }}>
                     {currency} {grandTotal.toFixed(2)}
                   </span>
                 </div>
@@ -1831,12 +1835,12 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                 paddingBottom: "calc(14px + env(safe-area-inset-bottom, 0px))",
               }}
             >
-              <div className="flex flex-col shrink-0 min-w-0 pr-1">
+              <div className="flex flex-col shrink-0 min-w-[115px] sm:min-w-[130px] pr-1">
                 <small className="text-[11px] font-medium text-stone-400 uppercase tracking-wider leading-none">
                   {t("orderTotal") || "Total"}
                 </small>
                 <b
-                  className="amt text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight leading-tight mt-0.5"
+                  className="amt text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight leading-tight mt-0.5 tabular-nums"
                   style={{ fontVariantNumeric: "tabular-nums" }}
                 >
                   {currency} {animatedTotal.toFixed(2)}
