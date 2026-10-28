@@ -527,6 +527,10 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   // Save new delivery slot via PATCH /api/orders
   const handleSaveReschedule = async () => {
     if (!rescheduleState) return;
+    if (rescheduleState.deliveryDate < todayStr) {
+      showToast("Delivery date cannot be in the past.");
+      return;
+    }
     const targetSlot =
       rescheduleState.customTimeSlot.trim() || rescheduleState.deliveryTimeSlot;
     if (!targetSlot) {
@@ -741,6 +745,11 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     e.preventDefault();
     if (quickOrderTotal <= 0) {
       showToast("Please enter a valid price for the arrangement.");
+      return;
+    }
+    const effectiveDate = quickDate || todayStr;
+    if (effectiveDate < todayStr) {
+      showToast("Delivery or pickup date cannot be in the past.");
       return;
     }
 
@@ -2430,11 +2439,19 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     type="date"
                     min={todayStr}
                     value={rescheduleState.deliveryDate}
-                    onChange={(e) =>
-                      setRescheduleState((prev) =>
-                        prev ? { ...prev, deliveryDate: e.target.value } : prev
-                      )
-                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val && val < todayStr) {
+                        setRescheduleState((prev) =>
+                          prev ? { ...prev, deliveryDate: todayStr } : prev
+                        );
+                        showToast("Cannot select a date in the past.");
+                      } else {
+                        setRescheduleState((prev) =>
+                          prev ? { ...prev, deliveryDate: val } : prev
+                        );
+                      }
+                    }}
                     className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900"
                   />
                 </div>
@@ -2862,7 +2879,15 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     type="date"
                     min={todayStr}
                     value={quickDate || todayStr}
-                    onChange={(e) => setQuickDate(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val && val < todayStr) {
+                        setQuickDate(todayStr);
+                        showToast("Cannot select a date in the past.");
+                      } else {
+                        setQuickDate(val);
+                      }
+                    }}
                     className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900"
                   />
                 </div>

@@ -17,6 +17,10 @@ import {
 } from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
 import { TngPaymentView } from "@/components/TngPaymentView";
+import { OrderSuccess } from "@/components/OrderSuccess";
+import { generateWhatsAppMessage, getWhatsAppUrl } from "@/utils/whatsapp";
+import { QtyStepper } from "@/components/QtyStepper";
+import { useCountUp } from "@/lib/useCountUp";
 import {
   AlertCircle,
   AlertTriangle,
@@ -89,6 +93,9 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
   );
   const checkoutStep = useCartStore((state) => state.checkoutStep);
   const setCheckoutStep = useCartStore((state) => state.setCheckoutStep);
+  const resetCheckout = useCartStore((state) => state.resetCheckout);
+  const quantity = useCartStore((state) => state.quantity);
+  const setQuantity = useCartStore((state) => state.setQuantity);
 
   const selectedProduct = useCartStore((state) => state.selectedProduct);
   const selectedLocalized = selectedProduct
@@ -116,6 +123,46 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showProductImageModal, setShowProductImageModal] = useState(false);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
+
+  const handleClose = () => {
+    if (checkoutStep === 3) {
+      resetCheckout();
+    } else {
+      setCheckoutDrawerOpen(false);
+    }
+  };
+
+  const whatsappMessage = useMemo(() => {
+    return generateWhatsAppMessage(store, liveStatus?.holidayPricingDisplay);
+  }, [
+    store,
+    liveStatus?.holidayPricingDisplay,
+    selectedProduct,
+    quantity,
+    selectedAddonIds,
+    fulfillmentMethod,
+    selectedDeliveryZoneId,
+    selectedDate,
+    selectedTime,
+    customerDetails,
+    locale,
+  ]);
+
+  const whatsappUrl = useMemo(() => {
+    return getWhatsAppUrl(store, liveStatus?.holidayPricingDisplay);
+  }, [
+    store,
+    liveStatus?.holidayPricingDisplay,
+    selectedProduct,
+    quantity,
+    selectedAddonIds,
+    fulfillmentMethod,
+    selectedDeliveryZoneId,
+    selectedDate,
+    selectedTime,
+    customerDetails,
+    locale,
+  ]);
 
   // Fetch latest store emergency status whenever checkout drawer opens
   useEffect(() => {
@@ -376,6 +423,9 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
   // Closed Days, Holiday Blackout & Emergency Status helper
   const getDateClosedInfo = (dateStr: string) => {
     if (!dateStr) return { isClosed: false, reason: "" };
+    if (dateStr < todayStr) {
+      return { isClosed: true, reason: t("validationPastDate") };
+    }
     if (dateStr === todayStr && isTodayPaused) {
       return { isClosed: true, reason: t("emergencyPauseNotice") };
     }
@@ -428,6 +478,9 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     isTodayDateRestricted ||
     (isExactTimeMode ? areTodayExactDeliveriesClosed : areTodayRangeSlotsClosed);
 
+  const minSelectableDate =
+    isTodayPaused || areTodayDeliveriesClosed ? tomorrowStr : todayStr;
+
   // Price & Delivery calculations
   const baseBouquetPrice = selectedProduct?.price || 0;
   const isHolidayInclusive = Boolean(
@@ -474,10 +527,12 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     ? deliveryConfig?.zones.find((z) => z.id === selectedDeliveryZoneId)
     : null;
   const baseDeliveryFee = selectedZone?.fee || 0;
+  const bouquetTotal = effectiveBouquetPrice * quantity;
+  const holidaySurchargeTotal = holidayLineItemSurcharge * quantity;
   const isFreeDelivery = Boolean(
     isDeliveryFeeEnabled &&
       deliveryConfig?.freeDeliveryThreshold &&
-      effectiveBouquetPrice + addonsTotal >= deliveryConfig.freeDeliveryThreshold
+      bouquetTotal + addonsTotal >= deliveryConfig.freeDeliveryThreshold
   );
   const deliveryFee = isDeliveryFeeEnabled
     ? isFreeDelivery
@@ -486,7 +541,8 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     : 0;
 
   const grandTotal =
-    effectiveBouquetPrice + addonsTotal + deliveryFee + holidayLineItemSurcharge;
+    bouquetTotal + addonsTotal + deliveryFee + holidaySurchargeTotal;
+  const animatedTotal = useCountUp(grandTotal, 280);
 
   // Reset selected time if date switched to today and current selection is expired
   useEffect(() => {
@@ -528,11 +584,13 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     setSelectedTime,
   ]);
 
-  // Set default initial date when drawer opens
+  // Set default initial date when drawer opens or if currently selectedDate is in the past
   useEffect(() => {
-    if (!selectedDate && isCheckoutDrawerOpen) {
-      if (areTodayDeliveriesClosed) {
-        if (!isTomorrowDateRestricted) {
+    if (!isCheckoutDrawerOpen) return;
+
+    if (!selectedDate || selectedDate < minSelectableDate) {
+      if (areTodayDeliveriesClosed || isTodayPaused) {
+        if (!isTomorrowDateRestricted && !isTomorrowBlocked) {
           setSelectedDate(tomorrowStr);
         } else {
           // Find next available open day
@@ -552,16 +610,22 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     selectedDate,
     isCheckoutDrawerOpen,
     areTodayDeliveriesClosed,
+    isTodayPaused,
+    minSelectableDate,
     isTomorrowDateRestricted,
+    isTomorrowBlocked,
     todayStr,
     tomorrowStr,
     setSelectedDate,
   ]);
 
   const setQuickDate = (daysAhead: number) => {
-    if (daysAhead === 0 && isTodayPaused) return;
-    if (daysAhead === 1 && isTomorrowBlocked) return;
-    setSelectedDate(getDateString(daysAhead));
+    if (daysAhead === 0 && (isTodayPaused || areTodayDeliveriesClosed)) return;
+    if (daysAhead === 1 && (isTomorrowBlocked || isTomorrowDateRestricted)) return;
+    const targetDate = getDateString(daysAhead);
+    if (targetDate < todayStr) return;
+    setSelectedDate(targetDate);
+    setValidationError(null);
   };
 
   const handleExactTimeChange = (timeVal: string) => {
@@ -620,6 +684,16 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     }
     if (!selectedDate) {
       setValidationError(t("validationDate"));
+      return;
+    }
+    if (selectedDate < todayStr) {
+      setValidationError(t("validationPastDate"));
+      return;
+    }
+    if (selectedDate < minSelectableDate) {
+      setValidationError(
+        isTodayPaused ? t("validationTodayPaused") : t("validationStoreClosedDate")
+      );
       return;
     }
     if (isHolidaySoldOut && holidayRule) {
@@ -717,6 +791,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
             nameZh: selectedProduct.nameZh,
             price: effectiveBouquetPrice,
             image: selectedProduct.image,
+            quantity: quantity,
           },
           addons: activeAddons.map((a) => ({
             id: a.id,
@@ -753,7 +828,17 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
   return (
     <Drawer
       open={isCheckoutDrawerOpen}
-      onOpenChange={setCheckoutDrawerOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          if (checkoutStep === 3) {
+            resetCheckout();
+          } else {
+            setCheckoutDrawerOpen(false);
+          }
+        } else {
+          setCheckoutDrawerOpen(true);
+        }
+      }}
       repositionInputs={false}
     >
       <DrawerContent className="max-w-md mx-auto overflow-hidden bg-[#FAF9F6] border-t border-stone-200 flex flex-col h-[88vh] h-[88svh] max-h-[88vh] max-h-[88svh]">
@@ -763,21 +848,31 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
             <div className="flex items-center gap-2">
               <span
                 className="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-xs"
-                style={{ backgroundColor: primaryColor }}
+                style={{
+                  backgroundColor: checkoutStep === 3 ? "#1faa59" : primaryColor,
+                }}
               >
-                {checkoutStep}
+                {checkoutStep === 3 ? (
+                  <Check className="h-3 w-3 stroke-[3]" />
+                ) : (
+                  checkoutStep
+                )}
               </span>
               <DrawerTitle className="text-base font-semibold text-stone-900 tracking-tight">
                 {checkoutStep === 1
                   ? t("fulfillmentAndDetails")
-                  : t("touchNGoPayment")}
+                  : checkoutStep === 2
+                  ? t("touchNGoPayment")
+                  : locale === "zh"
+                  ? "已发送订单"
+                  : "Order sent"}
               </DrawerTitle>
             </div>
             <div className="flex items-center gap-1.5">
               {store.enableLanguageSelector !== false && <LanguageSelector />}
               <button
                 type="button"
-                onClick={() => setCheckoutDrawerOpen(false)}
+                onClick={handleClose}
                 className="rounded-full p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors cursor-pointer"
                 aria-label={t("closeDrawer")}
               >
@@ -788,14 +883,22 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
           <DrawerDescription className="text-[12px] text-stone-500 mt-0.5">
             {checkoutStep === 1
               ? t("drawerOrderFor", { store: store.name })
-              : t("drawerTngSubtitle")}
+              : checkoutStep === 2
+              ? t("drawerTngSubtitle")
+              : locale === "zh"
+              ? "花店将在 WhatsApp 中与您核对订单。"
+              : "The florist will confirm in WhatsApp."}
           </DrawerDescription>
         </DrawerHeader>
 
-        {/* Scrollable Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4">
-          {checkoutStep === 1 ? (
-            <form onSubmit={handleProceedToPayment} className="space-y-4 pb-6">
+        {checkoutStep === 1 ? (
+          <form
+            id="checkout-step1-form"
+            onSubmit={handleProceedToPayment}
+            className="flex flex-col flex-1 min-h-0 overflow-hidden"
+          >
+            {/* Scrollable Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-4">
               {/* Selected Product Strip */}
               {selectedProduct && (
                 <div
@@ -861,11 +964,31 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                           {t("holidayInclusiveBadge")}
                         </span>
                       )}
-                      <span className="text-[11px] text-stone-400">• {t("qty")}</span>
+                      <span className="text-[11px] text-stone-400">
+                        • {t("qty", { count: quantity })}
+                      </span>
                     </div>
                   </div>
                 </div>
               )}
+
+              {/* Quantity Stepper Row */}
+              <div className="flex items-center justify-between rounded-2xl border border-stone-200/80 bg-white p-3.5 shadow-xs">
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700">
+                    {locale === "zh" ? "订购数量" : "Quantity"}
+                  </label>
+                  <p className="text-[10px] text-stone-400 mt-0.5">
+                    {locale === "zh" ? "最多可订购 20 束" : "Select up to 20 bouquets"}
+                  </p>
+                </div>
+                <QtyStepper
+                  value={quantity}
+                  onChange={setQuantity}
+                  min={1}
+                  max={20}
+                />
+              </div>
 
               {/* Enhance Your Gift (Add-ons section) */}
               {availableAddons.length > 0 && (
@@ -1099,19 +1222,19 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                     <div className="flex gap-1.5">
                       <button
                         type="button"
-                        disabled={isTodayPaused}
+                        disabled={isTodayPaused || areTodayDeliveriesClosed}
                         onClick={() => setQuickDate(0)}
                         className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-all ${
-                          isTodayPaused
+                          isTodayPaused || areTodayDeliveriesClosed
                             ? "opacity-60 cursor-not-allowed bg-stone-100 text-stone-400"
                             : "cursor-pointer"
                         } ${
-                          isToday
+                          isToday && !isTodayPaused && !areTodayDeliveriesClosed
                             ? "font-bold shadow-2xs"
                             : "border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100"
                         }`}
                         style={
-                          isToday && !isTodayPaused
+                          isToday && !isTodayPaused && !areTodayDeliveriesClosed
                             ? {
                                 borderColor: primaryColor,
                                 backgroundColor: `${primaryColor}14`,
@@ -1128,19 +1251,19 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                       </button>
                       <button
                         type="button"
-                        disabled={isTomorrowBlocked}
+                        disabled={isTomorrowBlocked || isTomorrowDateRestricted}
                         onClick={() => setQuickDate(1)}
                         className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-all ${
-                          isTomorrowBlocked
+                          isTomorrowBlocked || isTomorrowDateRestricted
                             ? "opacity-60 cursor-not-allowed bg-stone-100 text-stone-400"
                             : "cursor-pointer"
                         } ${
-                          selectedDate === tomorrowStr
+                          selectedDate === tomorrowStr && !isTomorrowBlocked && !isTomorrowDateRestricted
                             ? "font-bold shadow-2xs"
                             : "border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100"
                         }`}
                         style={
-                          selectedDate === tomorrowStr && !isTomorrowBlocked
+                          selectedDate === tomorrowStr && !isTomorrowBlocked && !isTomorrowDateRestricted
                             ? {
                                 borderColor: primaryColor,
                                 backgroundColor: `${primaryColor}14`,
@@ -1242,9 +1365,29 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                   <div className="relative w-full min-w-0">
                     <input
                       type="date"
-                      min={isTodayPaused ? tomorrowStr : todayStr}
+                      min={minSelectableDate}
                       value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) {
+                          setSelectedDate("");
+                          return;
+                        }
+                        if (val < todayStr) {
+                          setSelectedDate(minSelectableDate);
+                          setValidationError(t("validationPastDate"));
+                          return;
+                        }
+                        if (val < minSelectableDate) {
+                          setSelectedDate(minSelectableDate);
+                          setValidationError(
+                            isTodayPaused ? t("validationTodayPaused") : t("validationStoreClosedDate")
+                          );
+                          return;
+                        }
+                        setSelectedDate(val);
+                        setValidationError(null);
+                      }}
                       required
                       className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                     />
@@ -1564,6 +1707,11 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-stone-700 flex items-center gap-1.5">
                     <span>{t("subtotal")}</span>
+                    {quantity > 1 && (
+                      <span className="rounded-md bg-stone-200/70 px-1.5 py-0.2 text-[10px] font-semibold text-stone-700">
+                        x{quantity}
+                      </span>
+                    )}
                     {isHolidayInclusive && holidayRule && (
                       <span className="rounded-md bg-rose-100/80 px-1.5 py-0.2 text-[10px] font-semibold text-rose-800 border border-rose-200">
                         {locale === "zh" ? holidayRule.nameZh || holidayRule.name : holidayRule.name}
@@ -1571,7 +1719,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                     )}
                   </span>
                   <span className="font-semibold text-stone-900">
-                    {currency} {effectiveBouquetPrice.toFixed(2)}
+                    {currency} {bouquetTotal.toFixed(2)}
                   </span>
                 </div>
 
@@ -1613,13 +1761,18 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-stone-700 flex items-center gap-1.5">
                       <span>{locale === "zh" ? "节日高峰附加费" : "Peak Holiday Surcharge"}</span>
+                      {quantity > 1 && (
+                        <span className="rounded-md bg-rose-100/80 px-1.5 py-0.2 text-[10px] font-semibold text-rose-800">
+                          x{quantity}
+                        </span>
+                      )}
                       <span className="rounded-md bg-rose-100/80 px-1.5 py-0.2 text-[10px] font-semibold text-rose-800 border border-rose-200">
                         {locale === "zh" ? holidayRule.nameZh || holidayRule.name : holidayRule.name}
                         {holidayRule.surchargeType === "percentage" ? ` (+${holidayRule.surchargeAmount}%)` : ""}
                       </span>
                     </span>
                     <span className="font-semibold text-stone-900">
-                      +{currency} {holidayLineItemSurcharge.toFixed(2)}
+                      +{currency} {holidaySurchargeTotal.toFixed(2)}
                     </span>
                   </div>
                 )}
@@ -1632,98 +1785,119 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Proceed to Payment Button */}
-              <div className="pt-1">
-                {isProductSoldOut && (
-                  <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50/90 p-3 text-xs shadow-xs">
-                    <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="font-semibold text-rose-900">
-                        {locale === "zh" ? "该花礼今日已售罄" : "This floral arrangement is sold out today"}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-rose-700 leading-relaxed">
-                        {locale === "zh"
-                          ? "花艺师今日该花材配额已用完，暂无法提交订单。请返回首页选购其他精美花礼。"
-                          : "Today's floral stem quota for this arrangement is fully booked. Please browse our other available bouquets."}
-                      </p>
-                    </div>
+              {/* Sold Out Warning Banner (if product sold out) */}
+              {isProductSoldOut && (
+                <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50/90 p-3 text-xs shadow-xs">
+                  <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-rose-900">
+                      {locale === "zh" ? "该花礼今日已售罄" : "This floral arrangement is sold out today"}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-rose-700 leading-relaxed">
+                      {locale === "zh"
+                        ? "花艺师今日该花材配额已用完，暂无法提交订单。请返回首页选购其他精美花礼。"
+                        : "Today's floral stem quota for this arrangement is fully booked. Please browse our other available bouquets."}
+                    </p>
                   </div>
-                )}
+                </div>
+              )}
 
+              {/* Legal & Policy Disclaimer */}
+              <p className="text-center text-[10px] text-stone-400 leading-relaxed pb-2">
+                {t("orderConsentNotice")}{" "}
                 <button
-                  type="submit"
-                  disabled={isProductSoldOut || isCheckingStock}
-                  className={`flex w-full items-center justify-between rounded-xl py-3 px-4 text-sm font-semibold transition-all ${
-                    isProductSoldOut
-                      ? "bg-stone-200 text-stone-400 border border-stone-300/80 cursor-not-allowed shadow-none"
-                      : isCheckingStock
-                      ? "opacity-80 cursor-wait text-white shadow-md"
-                      : "text-white shadow-md active:scale-98 hover:opacity-95 cursor-pointer"
-                  }`}
-                  style={!isProductSoldOut ? { backgroundColor: primaryColor } : undefined}
+                  type="button"
+                  onClick={() => setShowPolicyModal(true)}
+                  className="underline underline-offset-2 text-stone-600 hover:text-stone-900 cursor-pointer font-medium"
                 >
-                  <div className="flex items-center gap-2">
-                    {isCheckingStock ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin text-white" />
-                        <span className="font-medium text-white">
-                          {locale === "zh" ? "正在实时核验鲜花配额..." : "Verifying live stock quota..."}
-                        </span>
-                      </>
-                    ) : isProductSoldOut ? (
-                      <>
-                        <Ban className="h-4 w-4 text-stone-400" />
-                        <span className="font-semibold text-stone-500">
-                          {locale === "zh" ? "今日已售罄 • 无法提交订单" : "Sold Out Today • Cannot Order"}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="font-medium text-white/90">
-                        {t("proceedToPayment")}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5 font-bold">
-                    <span className={isProductSoldOut ? "text-stone-400 line-through text-xs" : ""}>
-                      {`${currency} ${grandTotal.toFixed(2)}`}
-                    </span>
-                    {!isProductSoldOut && !isCheckingStock && (
-                      <ArrowRight className="h-4 w-4" />
-                    )}
-                  </div>
+                  {t("substitutionStorePolicy")}
+                </button>{" "}
+                {t("and")}{" "}
+                <button
+                  type="button"
+                  onClick={() => setShowPolicyModal(true)}
+                  className="underline underline-offset-2 text-stone-600 hover:text-stone-900 cursor-pointer font-medium"
+                >
+                  {t("privacyNoticePdpa")}
                 </button>
+                .
+              </p>
+            </div>
 
-                {/* Legal & Policy Disclaimer */}
-                <p className="mt-2.5 text-center text-[10px] text-stone-400 leading-relaxed">
-                  {t("orderConsentNotice")}{" "}
-                  <button
-                    type="button"
-                    onClick={() => setShowPolicyModal(true)}
-                    className="underline underline-offset-2 text-stone-600 hover:text-stone-900 cursor-pointer font-medium"
-                  >
-                    {t("substitutionStorePolicy")}
-                  </button>{" "}
-                  {t("and")}{" "}
-                  <button
-                    type="button"
-                    onClick={() => setShowPolicyModal(true)}
-                    className="underline underline-offset-2 text-stone-600 hover:text-stone-900 cursor-pointer font-medium"
-                  >
-                    {t("privacyNoticePdpa")}
-                  </button>
-                  .
-                </p>
+            {/* Persistent Step 1 Footer (never scrolls away) */}
+            <div
+              className="sh-f shrink-0 flex items-center justify-between gap-3.5 border-t border-stone-200/80 bg-white px-[18px] py-3 shadow-lg"
+              style={{
+                paddingBottom: "calc(14px + env(safe-area-inset-bottom, 0px))",
+              }}
+            >
+              <div className="flex flex-col shrink-0 min-w-0 pr-1">
+                <small className="text-[11px] font-medium text-stone-400 uppercase tracking-wider leading-none">
+                  {t("orderTotal") || "Total"}
+                </small>
+                <b
+                  className="amt text-lg sm:text-xl font-extrabold text-stone-900 tracking-tight leading-tight mt-0.5"
+                  style={{ fontVariantNumeric: "tabular-nums" }}
+                >
+                  {currency} {animatedTotal.toFixed(2)}
+                </b>
               </div>
-            </form>
-          ) : (
-            /* Step 2: TNG Payment View */
+
+              <button
+                type="submit"
+                form="checkout-step1-form"
+                disabled={isProductSoldOut || isCheckingStock}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-3 px-4 text-sm font-semibold transition-all focus-visible:outline-2 focus-visible:outline-stone-800 ${
+                  isProductSoldOut
+                    ? "bg-stone-200 text-stone-400 border border-stone-300/80 cursor-not-allowed shadow-none"
+                    : isCheckingStock
+                    ? "opacity-80 cursor-wait text-white shadow-md"
+                    : "text-white shadow-md active:scale-98 hover:opacity-95 cursor-pointer"
+                }`}
+                style={!isProductSoldOut ? { backgroundColor: primaryColor } : undefined}
+              >
+                {isCheckingStock ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-white" />
+                    <span className="font-medium text-white truncate">
+                      {locale === "zh" ? "正在实时核验鲜花配额..." : "Verifying live stock quota..."}
+                    </span>
+                  </>
+                ) : isProductSoldOut ? (
+                  <>
+                    <Ban className="h-4 w-4 text-stone-400" />
+                    <span className="font-semibold text-stone-500 truncate">
+                      {locale === "zh" ? "今日已售罄 • 无法提交订单" : "Sold Out Today • Cannot Order"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-white/90 truncate">
+                      {t("proceedToPayment")}
+                    </span>
+                    <ArrowRight className="h-4 w-4 shrink-0" />
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        ) : checkoutStep === 2 ? (
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4">
             <TngPaymentView
               store={store}
               pricingDisplayMode={liveStatus?.holidayPricingDisplay}
             />
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-0">
+            <OrderSuccess
+              key={selectedProduct ? `success-${selectedProduct.id}` : "success"}
+              message={whatsappMessage}
+              waUrl={whatsappUrl}
+              onBack={resetCheckout}
+            />
+          </div>
+        )}
       </DrawerContent>
 
       {/* Store Policy & Privacy Notice Modal */}

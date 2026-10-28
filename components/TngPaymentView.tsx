@@ -9,7 +9,7 @@ import {
   HolidayPricingDisplayMode,
 } from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
-import { sendOrderViaWhatsApp } from "@/utils/whatsapp";
+import { getWhatsAppUrl, sendOrderViaWhatsApp } from "@/utils/whatsapp";
 import { useTranslation } from "@/i18n/localeStore";
 import {
   getHolidayRuleForDate,
@@ -53,6 +53,7 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
     ? getProductLocalized(selectedProduct, locale)
     : null;
   const setCheckoutStep = useCartStore((state) => state.setCheckoutStep);
+  const quantity = useCartStore((state) => state.quantity);
 
   const [hasCopiedAmount, setHasCopiedAmount] = useState(false);
   const [hasLaunchedApp, setHasLaunchedApp] = useState(false);
@@ -91,10 +92,12 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
     ? deliveryConfig?.zones.find((z) => z.id === selectedDeliveryZoneId)
     : null;
   const baseDeliveryFee = selectedZone?.fee || 0;
+  const bouquetTotal = effectiveProductPrice * quantity;
+  const holidaySurchargeTotal = holidayLineItemSurcharge * quantity;
   const isFreeDelivery = Boolean(
     isDeliveryFeeEnabled &&
       deliveryConfig?.freeDeliveryThreshold &&
-      effectiveProductPrice + addonsTotal >= deliveryConfig.freeDeliveryThreshold
+      bouquetTotal + addonsTotal >= deliveryConfig.freeDeliveryThreshold
   );
   const deliveryFee = isDeliveryFeeEnabled
     ? isFreeDelivery
@@ -102,7 +105,7 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
       : baseDeliveryFee
     : 0;
 
-  const grandTotal = effectiveProductPrice + addonsTotal + deliveryFee + holidayLineItemSurcharge;
+  const grandTotal = bouquetTotal + addonsTotal + deliveryFee + holidaySurchargeTotal;
   const priceFormatted = `${currency} ${grandTotal.toFixed(2)}`;
 
   const copyAmountToClipboard = () => {
@@ -377,12 +380,14 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
             </ol>
           </div>
 
-          {/* 4. WhatsApp Confirmation Button */}
+          {/* 4. WhatsApp Confirmation Link */}
           <div className="pt-1">
-            <button
-              type="button"
-              onClick={handleConfirmWhatsApp}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3.5 px-4 text-sm font-bold text-white shadow-md shadow-emerald-500/20 transition-all duration-200 hover:bg-[#20ba59] active:scale-98 cursor-pointer"
+            <a
+              href={getWhatsAppUrl(store, pricingDisplayMode)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setCheckoutStep(3)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3.5 px-4 text-sm font-bold text-white shadow-md shadow-emerald-500/20 transition-all duration-200 hover:bg-[#20ba59] active:scale-98 cursor-pointer no-underline"
             >
               <Image
                 src="/icons/whatsapp.svg"
@@ -393,7 +398,7 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
                 unoptimized
               />
               <span>{t("confirmSendWhatsapp")}</span>
-            </button>
+            </a>
 
             <p className="mt-2 text-center text-[11px] text-stone-400">
               {t("whatsappHelperText")}

@@ -60,6 +60,9 @@ export async function generateMetadata({
   };
 }
 
+import { cookies } from "next/headers";
+import { ProductViewMode } from "@/components/ProductCard";
+
 /**
  * Ensure live server rendering for real-time emergency status and product stock
  */
@@ -76,7 +79,25 @@ export default async function StorePage({ params }: StorePageProps) {
     notFound();
   }
 
+  const cookieStore = await cookies();
+  const rawViewMode = cookieStore.get("florist_catalog_view")?.value;
+  const initialViewMode =
+    rawViewMode === "grid" || rawViewMode === "list"
+      ? (rawViewMode as ProductViewMode)
+      : undefined;
+
+  const rawHideSoldOut = cookieStore.get("florist_hide_sold_out")?.value;
+  const initialHideSoldOut =
+    rawHideSoldOut === "true" ? true : rawHideSoldOut === "false" ? false : undefined;
+
   const initialStatus = await getStoreEmergencyStatus(store.slug);
 
-  return <StorefrontClient store={store} initialStatus={initialStatus} />;
+  return (
+    <StorefrontClient
+      store={store}
+      initialStatus={initialStatus}
+      initialViewMode={initialViewMode}
+      initialHideSoldOut={initialHideSoldOut}
+    />
+  );
 }

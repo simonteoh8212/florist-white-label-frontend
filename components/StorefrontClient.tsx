@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Product, StoreConfig } from "@/config/stores";
@@ -12,6 +12,8 @@ import { StorePolicyModal } from "@/components/StorePolicyModal";
 import { StorePausedAnnouncementModal } from "@/components/StorePausedAnnouncementModal";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTranslation } from "@/i18n/localeStore";
+import { FavouritesProvider, useFavourites } from "@/components/FavouritesProvider";
+import { FavouritesDrawer } from "@/components/FavouritesDrawer";
 import {
   AlertCircle,
   ArrowUp,
@@ -36,14 +38,39 @@ import { StoreEmergencyStatus } from "@/lib/storeStatus";
 
 type SortOption = "none" | "price_high_low" | "price_low_high";
 
+function HeaderFavouritesButton() {
+  const { ids, openFavourites } = useFavourites();
+  const count = ids.length;
+
+  return (
+    <button
+      type="button"
+      onClick={openFavourites}
+      className="fvb focus-visible:outline-2 focus-visible:outline-stone-800"
+      aria-label={`Favourites (${count})`}
+    >
+      ♥
+      {count > 0 && (
+        <b key={count} className="bump" aria-hidden="true">
+          {count}
+        </b>
+      )}
+    </button>
+  );
+}
+
 interface StorefrontClientProps {
   store: StoreConfig;
   initialStatus?: StoreEmergencyStatus;
+  initialViewMode?: ProductViewMode;
+  initialHideSoldOut?: boolean;
 }
 
 export const StorefrontClient: React.FC<StorefrontClientProps> = ({
   store,
   initialStatus,
+  initialViewMode,
+  initialHideSoldOut,
 }) => {
   const { t, locale, getCategory } = useTranslation();
   const syncTenantStore = useCartStore((state) => state.syncTenantStore);
@@ -124,18 +151,42 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
   const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
   const [showPolicyModal, setShowPolicyModal] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<ProductViewMode>("grid");
-  const [hideSoldOut, setHideSoldOut] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<ProductViewMode>(() => {
+    if (initialViewMode) return initialViewMode;
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("florist_catalog_view");
+        if (saved === "grid" || saved === "list") return saved;
+      } catch {}
+    }
+    return "grid";
+  });
+  const [hideSoldOut, setHideSoldOut] = useState<boolean>(() => {
+    if (initialHideSoldOut !== undefined) return initialHideSoldOut;
+    if (typeof window !== "undefined") {
+      try {
+        return localStorage.getItem("florist_hide_sold_out") === "true";
+      } catch {}
+    }
+    return false;
+  });
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem("florist_catalog_view");
       if (saved === "grid" || saved === "list") {
-        setViewMode(saved);
+        if (saved !== viewMode) {
+          setViewMode(saved);
+        }
+        document.cookie = `florist_catalog_view=${saved}; path=/; max-age=31536000; SameSite=Lax`;
       }
       const savedHideSoldOut = localStorage.getItem("florist_hide_sold_out");
-      if (savedHideSoldOut === "true") {
-        setHideSoldOut(true);
+      if (savedHideSoldOut !== null) {
+        const isHide = savedHideSoldOut === "true";
+        if (isHide !== hideSoldOut) {
+          setHideSoldOut(isHide);
+        }
+        document.cookie = `florist_hide_sold_out=${isHide}; path=/; max-age=31536000; SameSite=Lax`;
       }
     } catch {}
   }, []);
@@ -144,6 +195,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
     setViewMode(mode);
     try {
       localStorage.setItem("florist_catalog_view", mode);
+      document.cookie = `florist_catalog_view=${mode}; path=/; max-age=31536000; SameSite=Lax`;
     } catch {}
   };
 
@@ -152,6 +204,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
       const next = !prev;
       try {
         localStorage.setItem("florist_hide_sold_out", String(next));
+        document.cookie = `florist_hide_sold_out=${next}; path=/; max-age=31536000; SameSite=Lax`;
       } catch {}
       return next;
     });
@@ -167,6 +220,79 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
       window.removeEventListener("scroll", handleScroll);
     };
   }, []);
+
+  // Category Chips Sliding Pill & Auto-center
+  const chipsContainerRef = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLDivElement>(null);
+
+  const movePill = useCallback((smoothScroll: boolean = false) => {
+    if (!chipsContainerRef.current || !pillRef.current) return;
+    const activeChip = chipsContainerRef.current.querySelector<HTMLElement>(
+      ".category-chip.is-active"
+    );
+    if (!activeChip) return;
+
+    const pill = pillRef.current;
+    pill.style.transform = `translateX(${activeChip.offsetLeft}px)`;
+    pill.style.width = `${activeChip.offsetWidth}px`;
+    pill.style.top = `${activeChip.offsetTop}px`;
+    pill.style.height = `${activeChip.offsetHeight}px`;
+    pill.style.opacity = "1";
+
+    if (smoothScroll) {
+      const prefersReducedMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      activeChip.scrollIntoView({
+        inline: "center",
+        block: "nearest",
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+      });
+    }
+  }, []);
+
+  const handleSelectCategory = (cat: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    setSelectedCategory(cat);
+    const chip = e.currentTarget;
+    if (pillRef.current) {
+      pillRef.current.style.transform = `translateX(${chip.offsetLeft}px)`;
+      pillRef.current.style.width = `${chip.offsetWidth}px`;
+      pillRef.current.style.top = `${chip.offsetTop}px`;
+      pillRef.current.style.height = `${chip.offsetHeight}px`;
+      pillRef.current.style.opacity = "1";
+    }
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    chip.scrollIntoView({
+      inline: "center",
+      block: "nearest",
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+    });
+  };
+
+  useEffect(() => {
+    // Initial position after render
+    const timer = setTimeout(() => {
+      movePill(false);
+    }, 20);
+
+    const handleResize = () => {
+      movePill(false);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [movePill]);
+
+  // Keep pill positioned if category changes externally (e.g. Reset filters)
+  useEffect(() => {
+    movePill(true);
+  }, [selectedCategory, movePill]);
 
   const scrollToTop = () => {
     window.scrollTo({
@@ -287,14 +413,15 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
   const currency = store.currency || "RM";
 
   return (
-    <div
-      className="min-h-screen bg-[#faf8f5] text-stone-900"
-      style={
-        {
-          "--brand-color": store.primaryColor,
-        } as React.CSSProperties
-      }
-    >
+    <FavouritesProvider>
+      <div
+        className="min-h-screen bg-[#faf8f5] text-stone-900"
+        style={
+          {
+            "--brand-color": store.primaryColor,
+          } as React.CSSProperties
+        }
+      >
       {/* Mobile-first centered container */}
       <main className="mx-auto flex min-h-screen max-w-md flex-col bg-white shadow-xl shadow-stone-200/50 sm:rounded-3xl sm:my-6 sm:border sm:border-stone-200/60">
         {/* Top Announcement Bar / Emergency Banner */}
@@ -345,6 +472,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
             {store.enableLanguageSelector !== false && (
               <LanguageSelector primaryColor={store.primaryColor} />
             )}
+            <HeaderFavouritesButton />
             <a
               href={generalInquiryUrl}
               target="_blank"
@@ -549,24 +677,32 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
 
         {/* Category Filter Pills */}
         <section className="px-4 py-2">
-          <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pb-1">
+          <div
+            ref={chipsContainerRef}
+            className="chips-row no-scrollbar relative flex items-center gap-1.5 overflow-x-auto pb-1"
+          >
+            {/* Sliding Pill */}
+            <div
+              ref={pillRef}
+              className="sliding-category-pill"
+              style={{
+                backgroundColor: store.primaryColor,
+                opacity: 0,
+              }}
+            />
+
             {categories.map((cat) => {
               const isActive = selectedCategory === cat;
               return (
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
+                  onClick={(e) => handleSelectCategory(cat, e)}
+                  className={`category-chip rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap cursor-pointer ${
                     isActive
-                      ? "text-white shadow-2xs"
+                      ? "is-active font-bold shadow-2xs"
                       : "bg-stone-100 text-stone-600 hover:bg-stone-200/80"
                   }`}
-                  style={
-                    isActive
-                      ? { backgroundColor: store.primaryColor }
-                      : undefined
-                  }
                 >
                   {cat === "All" ? t("allCategories") : getCategory(cat)}
                 </button>
@@ -642,7 +778,10 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
               </span>
 
               {/* View Mode Toggle: Grid (2 in a row) vs List (1 in a row) */}
-              <div className="flex items-center rounded-xl bg-stone-100 p-0.5 border border-stone-200/60 shadow-2xs">
+              <div
+                suppressHydrationWarning
+                className="flex items-center rounded-xl bg-stone-100 p-0.5 border border-stone-200/60 shadow-2xs"
+              >
                 <button
                   type="button"
                   onClick={() => handleToggleViewMode("grid")}
@@ -655,7 +794,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
                   }`}
                   style={viewMode === "grid" ? { color: store.primaryColor } : undefined}
                 >
-                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <LayoutGrid className="h-5.5 w-5.5" />
                   <span className="hidden sm:inline">{t("viewGrid")}</span>
                 </button>
                 <button
@@ -670,7 +809,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
                   }`}
                   style={viewMode === "list" ? { color: store.primaryColor } : undefined}
                 >
-                  <List className="h-3.5 w-3.5" />
+                  <List className="h-5.5 w-5.5" />
                   <span className="hidden sm:inline">{t("viewList")}</span>
                 </button>
               </div>
@@ -719,13 +858,15 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
             </div>
           ) : (
             <div
+              key={`cards-${selectedCategory}-${searchQuery}-${sortOrder}-${hideSoldOut}`}
+              suppressHydrationWarning
               className={
                 viewMode === "grid"
-                  ? "grid grid-cols-2 gap-2.5 sm:gap-4"
+                  ? "grid grid-cols-2 gap-[14px]"
                   : "grid grid-cols-1 gap-3 sm:gap-3.5"
               }
             >
-              {displayedProducts.map((product) => {
+              {displayedProducts.map((product, index) => {
                 const isSoldOut = Boolean(
                   product.inStock === false ||
                   storeStatus?.outOfStockProductIds?.includes(product.id)
@@ -737,6 +878,7 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
                     store={store}
                     isSoldOut={isSoldOut}
                     viewMode={viewMode}
+                    cardIndex={index}
                     onViewImage={(p) => setPreviewProduct(p)}
                   />
                 );
@@ -916,9 +1058,13 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
           onStatusChange={setStoreStatus}
         />
 
+        {/* Favourites Bottom Sheet Drawer */}
+        <FavouritesDrawer store={store} storeStatus={storeStatus} />
+
         {/* Store Paused & Non-Operating Announcement Pop-up Modal */}
         <StorePausedAnnouncementModal store={store} storeStatus={storeStatus} />
       </main>
     </div>
+  </FavouritesProvider>
   );
 };

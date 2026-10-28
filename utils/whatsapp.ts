@@ -38,6 +38,7 @@ export function generateWhatsAppMessage(
     selectedDate,
     selectedTime,
     customerDetails,
+    quantity = 1,
   } = useCartStore.getState();
 
   const locale = useLocaleStore.getState().locale || "en";
@@ -62,24 +63,6 @@ export function generateWhatsAppMessage(
   );
   const addonsTotal = activeAddons.reduce((sum, a) => sum + a.price, 0);
 
-  // Resolve delivery zone and fee
-  const deliveryConfig = store.deliveryFeeConfig;
-  const isDeliveryFeeEnabled = Boolean(isDelivery && deliveryConfig?.enabled);
-  const selectedZone = isDeliveryFeeEnabled
-    ? deliveryConfig?.zones.find((z) => z.id === selectedDeliveryZoneId)
-    : null;
-  const baseDeliveryFee = selectedZone?.fee || 0;
-  const isFreeDelivery = Boolean(
-    isDeliveryFeeEnabled &&
-      deliveryConfig?.freeDeliveryThreshold &&
-      baseProductPrice + addonsTotal >= deliveryConfig.freeDeliveryThreshold
-  );
-  const deliveryFee = isDeliveryFeeEnabled
-    ? isFreeDelivery
-      ? 0
-      : baseDeliveryFee
-    : 0;
-
   // Holiday peak rule and surcharge calculation
   const holidayRule = getHolidayRuleForDate(store, selectedDate);
   const isHolidayInclusive = Boolean(
@@ -96,7 +79,28 @@ export function generateWhatsAppMessage(
     pricingDisplayOverride
   );
 
-  const grandTotal = effectiveProductPrice + addonsTotal + deliveryFee + holidayLineItemSurcharge;
+  const bouquetTotal = effectiveProductPrice * quantity;
+  const holidaySurchargeTotal = holidayLineItemSurcharge * quantity;
+
+  // Resolve delivery zone and fee
+  const deliveryConfig = store.deliveryFeeConfig;
+  const isDeliveryFeeEnabled = Boolean(isDelivery && deliveryConfig?.enabled);
+  const selectedZone = isDeliveryFeeEnabled
+    ? deliveryConfig?.zones.find((z) => z.id === selectedDeliveryZoneId)
+    : null;
+  const baseDeliveryFee = selectedZone?.fee || 0;
+  const isFreeDelivery = Boolean(
+    isDeliveryFeeEnabled &&
+      deliveryConfig?.freeDeliveryThreshold &&
+      bouquetTotal + addonsTotal >= deliveryConfig.freeDeliveryThreshold
+  );
+  const deliveryFee = isDeliveryFeeEnabled
+    ? isFreeDelivery
+      ? 0
+      : baseDeliveryFee
+    : 0;
+
+  const grandTotal = bouquetTotal + addonsTotal + deliveryFee + holidaySurchargeTotal;
 
   const productName = selectedProduct
     ? isZh
@@ -120,6 +124,12 @@ export function generateWhatsAppMessage(
         `*订购花礼：*`,
         `\u2022 商品：${productName}`,
         `\u2022 单价：${currency} ${effectiveProductPrice.toFixed(2)}${productPriceSuffixZh}`,
+        ...(quantity > 1
+          ? [
+              `\u2022 数量：${quantity} 束`,
+              `\u2022 小计：${currency} ${bouquetTotal.toFixed(2)}`,
+            ]
+          : []),
       ]
     : [
         `*NEW ORDER - ${store.name.toUpperCase()}*`,
@@ -127,6 +137,12 @@ export function generateWhatsAppMessage(
         `*ORDERED ITEM:*`,
         `\u2022 Product: ${productName}`,
         `\u2022 Price: ${currency} ${effectiveProductPrice.toFixed(2)}${productPriceSuffixEn}`,
+        ...(quantity > 1
+          ? [
+              `\u2022 Quantity: ${quantity}`,
+              `\u2022 Subtotal: ${currency} ${bouquetTotal.toFixed(2)}`,
+            ]
+          : []),
       ];
 
   // Optional Add-ons section
@@ -347,10 +363,13 @@ export function generateWhatsAppMessage(
 }
 
 /**
- * Constructs the WhatsApp URL using the reliable api.whatsapp.com endpoint
- * to ensure parameters never get stripped or corrupted by wa.me redirect proxies.
+ * Constructs the WhatsApp wa.me URL for direct, gesture-initiated links
+ * that are never blocked as popups by mobile browsers.
  */
-export function getWhatsAppUrl(storeOverride?: StoreConfig): string {
+export function getWhatsAppUrl(
+  storeOverride?: StoreConfig,
+  pricingDisplayOverride?: HolidayPricingDisplayMode
+): string {
   const store = resolveStore(storeOverride);
   const digits = store.whatsapp.replace(/\D/g, "");
   const cleanNumber = digits.startsWith("60")
@@ -358,8 +377,8 @@ export function getWhatsAppUrl(storeOverride?: StoreConfig): string {
     : digits.startsWith("0")
       ? `6${digits}`
       : `60${digits}`;
-  const text = generateWhatsAppMessage(store);
-  return `https://api.whatsapp.com/send?phone=${cleanNumber}&text=${encodeURIComponent(text)}`;
+  const text = generateWhatsAppMessage(store, pricingDisplayOverride);
+  return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(text)}`;
 }
 
 /**

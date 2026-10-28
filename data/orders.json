@@ -6,6 +6,133 @@
       "name": "Peaceful Farewell Condolence Flowers",
       "nameZh": "安息悼念白事追思花束",
       "price": 220,
+      "image": "/stores/autarix/condolence_flowers.webp",
+      "quantity": 4
+    },
+    "addons": [],
+    "fulfillmentMethod": "delivery",
+    "deliveryZoneName": "Georgetown / Ayer Itam / Farlim / Jelutong",
+    "deliveryFee": 0,
+    "deliveryDate": "2026-10-29",
+    "deliveryTimeSlot": "11:00 AM – 12:00 PM",
+    "recipient": {
+      "name": "GB",
+      "phone": "+60164738833",
+      "deliveryAddress": "1B-37-3 IMPERIAL GRANDE, PERSIARAN RELAU"
+    },
+    "cardMessage": "Happy Birthday to youu",
+    "notes": "",
+    "totalAmount": 880,
+    "paymentMode": "static_qr",
+    "paymentStatus": "paid_tng",
+    "orderSource": "web",
+    "fulfillmentStatus": "new",
+    "id": "ord_autarix_mvrm4vop",
+    "createdAt": "2026-10-28T04:27:08.521Z"
+  },
+  {
+    "storeSlug": "autarix",
+    "product": {
+      "id": "autarix-08",
+      "name": "Peaceful Farewell Condolence Flowers",
+      "nameZh": "安息悼念白事追思花束",
+      "price": 220,
+      "image": "/stores/autarix/condolence_flowers.webp",
+      "quantity": 4
+    },
+    "addons": [],
+    "fulfillmentMethod": "delivery",
+    "deliveryZoneName": "Georgetown / Ayer Itam / Farlim / Jelutong",
+    "deliveryFee": 0,
+    "deliveryDate": "2026-10-29",
+    "deliveryTimeSlot": "11:00 AM – 12:00 PM",
+    "recipient": {
+      "name": "GB",
+      "phone": "+60164738833",
+      "deliveryAddress": "1B-37-3 IMPERIAL GRANDE, PERSIARAN RELAU"
+    },
+    "cardMessage": "Happy Birthday to youu",
+    "notes": "",
+    "totalAmount": 880,
+    "paymentMode": "static_qr",
+    "paymentStatus": "paid_tng",
+    "orderSource": "web",
+    "fulfillmentStatus": "new",
+    "id": "ord_autarix_mvrm3noy",
+    "createdAt": "2026-10-28T04:26:11.506Z"
+  },
+  {
+    "storeSlug": "autarix",
+    "product": {
+      "id": "autarix-04",
+      "name": "Ocean Breeze Blue Floral Arrangement",
+      "nameZh": "海风物语梦幻蓝调花礼",
+      "price": 178,
+      "image": "/stores/autarix/blue_flowers.webp"
+    },
+    "addons": [],
+    "fulfillmentMethod": "delivery",
+    "deliveryZoneName": "Georgetown / Ayer Itam / Farlim / Jelutong",
+    "deliveryFee": 10,
+    "deliveryDate": "2026-11-28",
+    "deliveryTimeSlot": "10:00 AM – 11:00 AM",
+    "recipient": {
+      "name": "QWER",
+      "phone": "+60164738833",
+      "deliveryAddress": "Persiaran Relau\n1B-37-3 Imperial Grande"
+    },
+    "cardMessage": "Congratulations",
+    "notes": "",
+    "totalAmount": 188,
+    "paymentMode": "static_qr",
+    "paymentStatus": "paid_tng",
+    "orderSource": "web",
+    "fulfillmentStatus": "new",
+    "id": "ord_autarix_mvrjofym",
+    "createdAt": "2026-10-28T03:18:22.414Z"
+  },
+  {
+    "storeSlug": "autarix",
+    "product": {
+      "id": "autarix-02",
+      "name": "Chinese Valentine's (七夕) Bouquet",
+      "nameZh": "浪漫七夕情人节花束",
+      "price": 198,
+      "image": "/stores/autarix/chinese_valentines.webp"
+    },
+    "addons": [
+      {
+        "id": "led_lights",
+        "name": "Warm Fairy LED Lights",
+        "nameZh": "暖光 LED 氛围小彩灯",
+        "price": 10
+      }
+    ],
+    "fulfillmentMethod": "pickup",
+    "deliveryFee": 0,
+    "deliveryDate": "2026-10-28",
+    "deliveryTimeSlot": "1:00 PM – 2:00 PM",
+    "recipient": {
+      "name": "Chun Seong Teoh",
+      "phone": "+60164738833"
+    },
+    "cardMessage": "Happy Birthday",
+    "notes": "",
+    "totalAmount": 208,
+    "paymentMode": "static_qr",
+    "paymentStatus": "paid_tng",
+    "orderSource": "web",
+    "fulfillmentStatus": "new",
+    "id": "ord_autarix_mvrj3q8n",
+    "createdAt": "2026-10-28T03:02:15.959Z"
+  },
+  {
+    "storeSlug": "autarix",
+    "product": {
+      "id": "autarix-08",
+      "name": "Peaceful Farewell Condolence Flowers",
+      "nameZh": "安息悼念白事追思花束",
+      "price": 220,
       "image": "/stores/autarix/condolence_flowers.webp"
     },
     "addons": [],

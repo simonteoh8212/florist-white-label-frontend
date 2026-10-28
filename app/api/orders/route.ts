@@ -165,8 +165,17 @@ export async function POST(req: NextRequest) {
       holidayName,
     } = body;
 
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kuala_Lumpur",
+    }).format(new Date());
     const effectiveDate = deliveryDate || todayStr;
+
+    if (effectiveDate < todayStr) {
+      return NextResponse.json(
+        { success: false, error: "Delivery or pickup date cannot be in the past." },
+        { status: 400 }
+      );
+    }
     const effectiveSlot = deliveryTimeSlot || (orderSource === "walk_in" ? "Immediate Takeaway" : "Standard Slot");
     const effectiveRecipient = recipient || {
       name: orderSource === "walk_in" ? "Walk-In Customer" : "Phone Customer",
@@ -259,6 +268,18 @@ export async function PATCH(req: NextRequest) {
         { success: false, error: "Incorrect 4-digit PIN." },
         { status: 401 }
       );
+    }
+
+    if (deliveryDate) {
+      const todayStr = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kuala_Lumpur",
+      }).format(new Date());
+      if (deliveryDate < todayStr) {
+        return NextResponse.json(
+          { success: false, error: "Rescheduled date cannot be in the past." },
+          { status: 400 }
+        );
+      }
     }
 
     const updated = await updateOrderDetails(orderId, {

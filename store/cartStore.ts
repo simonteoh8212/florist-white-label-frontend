@@ -18,6 +18,7 @@ export interface CartState {
 
   // Product state
   selectedProduct: Product | null;
+  quantity: number;
 
   // Gift Add-ons state
   selectedAddonIds: string[];
@@ -33,11 +34,12 @@ export interface CartState {
 
   // UI state
   isCheckoutDrawerOpen: boolean;
-  checkoutStep: 1 | 2;
+  checkoutStep: 1 | 2 | 3;
 
   // Actions
   syncTenantStore: (store: StoreConfig) => void;
   setSelectedProduct: (product: Product | null) => void;
+  setQuantity: (quantity: number) => void;
   toggleAddon: (addonId: string) => void;
   setSelectedAddonIds: (addonIds: string[]) => void;
   setFulfillmentMethod: (method: FulfillmentMethod) => void;
@@ -46,7 +48,7 @@ export interface CartState {
   setSelectedTime: (time: string) => void;
   setCustomerDetails: (details: Partial<CustomerDetails>) => void;
   setCheckoutDrawerOpen: (isOpen: boolean) => void;
-  setCheckoutStep: (step: 1 | 2) => void;
+  setCheckoutStep: (step: 1 | 2 | 3) => void;
   openCheckoutWithProduct: (product: Product, store?: StoreConfig) => void;
   resetCheckout: () => void;
 }
@@ -64,6 +66,7 @@ export const useCartStore = create<CartState>((set) => ({
   currentStore: null,
 
   selectedProduct: null,
+  quantity: 1,
   selectedAddonIds: [],
   fulfillmentMethod: "delivery",
   selectedDeliveryZoneId: null,
@@ -85,6 +88,7 @@ export const useCartStore = create<CartState>((set) => ({
           currentStoreSlug: store.slug,
           currentStore: store,
           selectedProduct: null,
+          quantity: 1,
           selectedAddonIds: [],
           fulfillmentMethod: "delivery",
           selectedDeliveryZoneId: defaultZone,
@@ -102,6 +106,8 @@ export const useCartStore = create<CartState>((set) => ({
     }),
 
   setSelectedProduct: (product) => set({ selectedProduct: product }),
+
+  setQuantity: (quantity: number) => set({ quantity }),
 
   toggleAddon: (addonId: string) =>
     set((state) => ({
@@ -151,6 +157,7 @@ export const useCartStore = create<CartState>((set) => ({
           currentStoreSlug: store.slug,
           currentStore: store,
           selectedProduct: product,
+          quantity: 1,
           selectedAddonIds: [],
           fulfillmentMethod: "delivery",
           selectedDeliveryZoneId: defaultZone,
@@ -161,10 +168,14 @@ export const useCartStore = create<CartState>((set) => ({
           checkoutStep: 1,
         };
       }
+      const todayStr = new Date().toISOString().split("T")[0];
+      const isPastDate = Boolean(state.selectedDate && state.selectedDate < todayStr);
       return {
         selectedProduct: product,
+        quantity: 1,
         ...(store ? { currentStore: store, currentStoreSlug: store.slug } : {}),
         selectedDeliveryZoneId: state.selectedDeliveryZoneId || defaultZone,
+        ...(isPastDate ? { selectedDate: "", selectedTime: "" } : {}),
         isCheckoutDrawerOpen: true,
         checkoutStep: 1,
       };
@@ -173,6 +184,7 @@ export const useCartStore = create<CartState>((set) => ({
   resetCheckout: () =>
     set((state) => ({
       selectedProduct: null,
+      quantity: 1,
       selectedAddonIds: [],
       fulfillmentMethod: "delivery",
       selectedDeliveryZoneId:
