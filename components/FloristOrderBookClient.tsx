@@ -3,7 +3,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { StoreConfig, checkIfSlotIsRush } from "@/config/stores";
+import {
+  StoreConfig,
+  checkIfSlotIsRush,
+  isSlotPassed,
+  getSlotTimeStatus,
+} from "@/config/stores";
 import { Order, FulfillmentStatus } from "@/lib/orders";
 import {
   Lock,
@@ -43,8 +48,14 @@ import {
   PieChart,
   Globe,
   Loader2,
+  Info,
+  Bell,
+  LayoutList,
+  LayoutGrid,
 } from "lucide-react";
 import { StoreEmergencyStatus } from "@/lib/storeStatus";
+import { SlidingPillTabs, SlidingPillItem } from "@/components/SlidingPillTabs";
+import { FloristOrderCard } from "@/components/FloristOrderCard";
 
 interface FloristOrderBookClientProps {
   store: StoreConfig;
@@ -53,6 +64,18 @@ interface FloristOrderBookClientProps {
 export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   const primaryColor = store.primaryColor || "#BE185D";
   const currency = store.currency || "RM";
+
+  // Dates calculation helper (Asia/Kuala_Lumpur)
+  const getRelativeDateStr = (daysAhead: number = 0) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kuala_Lumpur",
+    }).format(d);
+  };
+
+  const todayStr = getRelativeDateStr(0);
+  const tomorrowStr = getRelativeDateStr(1);
 
   // Auth State
   const [pin, setPin] = useState("");
@@ -70,6 +93,8 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [showFinancialSummary, setShowFinancialSummary] = useState(false);
+  const [orderViewMode, setOrderViewMode] = useState<"compact" | "detailed">("detailed");
 
   // Reschedule State (Strategy 3)
   const [rescheduleState, setRescheduleState] = useState<{
@@ -87,12 +112,53 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   const [isResettingAllStock, setIsResettingAllStock] = useState(false);
   const [isEmergencyPanelOpen, setIsEmergencyPanelOpen] = useState(false);
   const [emergencyNoticeInput, setEmergencyNoticeInput] = useState("");
+  const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
+
+  // Close info tooltip on outside click
+  useEffect(() => {
+    if (!activeInfoTooltip) return;
+    const handleClickOutside = () => setActiveInfoTooltip(null);
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, [activeInfoTooltip]);
 
   // Channel Filter State (Web vs Walk-In vs Phone)
   const [channelFilter, setChannelFilter] = useState<"all" | "web" | "walk_in" | "phone">("all");
 
+  // Reusable Sliding Pill Items for Source Filter
+  const channelTabItems = useMemo(
+    (): SlidingPillItem<"all" | "web" | "walk_in" | "phone">[] => [
+      {
+        id: "all",
+        label: "All Channels",
+        activeColor: "#1c1917",
+      },
+      {
+        id: "web",
+        label: "Web Orders",
+        icon: <Globe className="h-3 w-3" />,
+        activeColor: "#0369a1",
+      },
+      {
+        id: "walk_in",
+        label: "Walk-In",
+        icon: <Store className="h-3 w-3" />,
+        activeColor: "#7e22ce",
+      },
+      {
+        id: "phone",
+        label: "Phone Orders",
+        icon: <Phone className="h-3 w-3" />,
+        activeColor: "#b45309",
+      },
+    ],
+    []
+  );
+
   // Quick Order (Walk-In Counter & Phone Order) State
   const [isQuickOrderOpen, setIsQuickOrderOpen] = useState(false);
+  const [isQuickOrderClosing, setIsQuickOrderClosing] = useState(false);
+  const [isRescheduleClosing, setIsRescheduleClosing] = useState(false);
   const [quickOrderChannel, setQuickOrderChannel] = useState<"walk_in" | "phone" | "web">("walk_in");
   const [quickOrderProductType, setQuickOrderProductType] = useState<"catalog" | "custom">("catalog");
   const [quickSelectedProductId, setQuickSelectedProductId] = useState<string>(store.products[0]?.id || "");
@@ -452,6 +518,25 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     ];
   }, [store.deliveryTimeConfig]);
 
+  // Filtered slots for reschedule modal: hides past slots when Today is selected
+  const availableSlotsForReschedule = useMemo((): string[] => {
+    if (!rescheduleState) return availableSlots;
+    const targetDate = rescheduleState.deliveryDate;
+    if (targetDate !== todayStr) {
+      // Tomorrow or future date: all configured slots are available
+      return availableSlots;
+    }
+    // Today: filter out any slot whose cutoff / end time has already passed
+    return availableSlots.filter(
+      (slot) => !isSlotPassed(targetDate, slot, store.deliveryTimeConfig?.slots)
+    );
+  }, [
+    rescheduleState?.deliveryDate,
+    todayStr,
+    availableSlots,
+    store.deliveryTimeConfig?.slots,
+  ]);
+
   // Clean phone number helper (e.g. 012... -> 6012...)
   const cleanPhone = (phone: string) => {
     let cleaned = phone.replace(/[^0-9]/g, "");
@@ -491,17 +576,80 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   };
 
   const openRescheduleModal = (order: Order) => {
+    const targetDate = order.deliveryDate >= todayStr ? order.deliveryDate : todayStr;
+    const isPast = isSlotPassed(targetDate, order.deliveryTimeSlot, store.deliveryTimeConfig?.slots);
+
+    // If current slot has already passed for today, pre-select the first available upcoming slot
+    let initialSlot = order.deliveryTimeSlot;
+    if (isPast && targetDate === todayStr) {
+      const validSlots = availableSlots.filter(
+        (s) => !isSlotPassed(targetDate, s, store.deliveryTimeConfig?.slots)
+      );
+      initialSlot = validSlots[0] || "";
+    }
+
+    setIsRescheduleClosing(false);
     setRescheduleState({
       orderId: order.id,
-      deliveryDate: order.deliveryDate,
-      deliveryTimeSlot: order.deliveryTimeSlot,
+      deliveryDate: targetDate,
+      deliveryTimeSlot: initialSlot,
       customTimeSlot: "",
     });
   };
 
-  const closeRescheduleModal = () => {
-    setRescheduleState(null);
-  };
+  const closeRescheduleModal = useCallback(() => {
+    if (isRescheduleClosing || !rescheduleState) return;
+    setIsRescheduleClosing(true);
+    setTimeout(() => {
+      setRescheduleState(null);
+      setIsRescheduleClosing(false);
+    }, 260);
+  }, [isRescheduleClosing, rescheduleState]);
+
+  const openQuickOrder = useCallback(() => {
+    setIsQuickOrderClosing(false);
+    setIsQuickOrderOpen(true);
+  }, []);
+
+  const handleCloseQuickOrder = useCallback(() => {
+    if (isQuickOrderClosing || !isQuickOrderOpen) return;
+    setIsQuickOrderClosing(true);
+    setTimeout(() => {
+      setIsQuickOrderOpen(false);
+      setIsQuickOrderClosing(false);
+    }, 260);
+  }, [isQuickOrderClosing, isQuickOrderOpen]);
+
+  // Dismiss any open pop-up modal on "Escape" key & lock background scroll while modal is active
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(rescheduleState || isQuickOrderOpen || activeInfoTooltip);
+    if (!isAnyModalOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (rescheduleState) {
+          closeRescheduleModal();
+        }
+        if (isQuickOrderOpen) {
+          handleCloseQuickOrder();
+        }
+        if (activeInfoTooltip) {
+          setActiveInfoTooltip(null);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    if (rescheduleState || isQuickOrderOpen) {
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [rescheduleState, isQuickOrderOpen, activeInfoTooltip, closeRescheduleModal, handleCloseQuickOrder]);
 
   // Pre-formatted polite WhatsApp reschedule proposal (strictly NO emojis, clean bullet dots only)
   const getRescheduleWhatsAppMessage = (
@@ -559,6 +707,18 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
       rescheduleState.customTimeSlot.trim() || rescheduleState.deliveryTimeSlot;
     if (!targetSlot) {
       showToast("Please choose or enter a delivery slot.");
+      return;
+    }
+
+    const slotStatus = getSlotTimeStatus(
+      rescheduleState.deliveryDate,
+      targetSlot,
+      store.deliveryTimeConfig?.rushThresholdMinutes ?? 45,
+      store.deliveryTimeConfig?.slots
+    );
+
+    if (slotStatus === "past") {
+      showToast("Cannot reschedule to a time slot that has already passed.");
       return;
     }
 
@@ -627,7 +787,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             ? `Slot updated to ${rescheduleState.deliveryDate} (${targetSlot}) • ⚡ Rush Order`
             : `Slot updated to ${rescheduleState.deliveryDate} (${targetSlot})`
         );
-        setRescheduleState(null);
+        closeRescheduleModal();
       } else {
         showToast(data.error || "Failed to update delivery slot");
       }
@@ -638,19 +798,6 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
       setIsSavingSlot(false);
     }
   };
-
-  // Dates calculation helper
-  const getRelativeDateStr = (daysAhead: number = 0) => {
-    const d = new Date();
-    d.setDate(d.getDate() + daysAhead);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  const todayStr = getRelativeDateStr(0);
-  const tomorrowStr = getRelativeDateStr(1);
 
   // Filter orders by active tab and search
   const filteredOrders = useMemo(() => {
@@ -690,6 +837,126 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   const todayOrders = useMemo(() => orders.filter((o) => o.deliveryDate === todayStr), [orders, todayStr]);
   const tomorrowOrders = useMemo(() => orders.filter((o) => o.deliveryDate === tomorrowStr), [orders, tomorrowStr]);
   const upcomingOrders = useMemo(() => orders.filter((o) => o.deliveryDate > tomorrowStr), [orders, tomorrowStr]);
+
+  // Count of pending new unfulfilled orders
+  const newOrdersCount = useMemo(() => {
+    return orders.filter((o) => o.fulfillmentStatus === "new").length;
+  }, [orders]);
+
+  // Smoothly scroll down to the product orders list below
+  const scrollToOrders = useCallback(() => {
+    setTimeout(() => {
+      const el = document.getElementById("orders-list-section");
+      if (el) {
+        const headerOffset = 64; // height of sticky header
+        const elementPosition = el.getBoundingClientRect().top;
+        const offsetPosition = elementPosition + (window.scrollY || window.pageYOffset || 0) - headerOffset;
+
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: "smooth",
+        });
+      }
+    }, 60);
+  }, []);
+
+  // 1-Tap Notification Bell: jump directly to incoming new orders
+  const handleBellClick = useCallback(() => {
+    const newOrders = orders.filter((o) => o.fulfillmentStatus === "new");
+    if (newOrders.length === 0) {
+      showToast("All orders are fulfilled or in progress (0 new orders).");
+      scrollToOrders();
+      return;
+    }
+
+    setSearchQuery("");
+    setChannelFilter("all");
+
+    const hasNewToday = newOrders.some((o) => o.deliveryDate === todayStr);
+    const hasNewTomorrow = newOrders.some((o) => o.deliveryDate === tomorrowStr);
+
+    if (hasNewToday) {
+      setActiveTab("today");
+    } else if (hasNewTomorrow) {
+      setActiveTab("tomorrow");
+    } else {
+      setActiveTab("all");
+    }
+
+    scrollToOrders();
+    showToast(
+      `Jumped to ${newOrders.length} new pending ${
+        newOrders.length === 1 ? "order" : "orders"
+      }`
+    );
+  }, [orders, todayStr, tomorrowStr, scrollToOrders]);
+
+  // Reusable Sliding Pill Items for Date View Tabs
+  const dateTabItems = useMemo(
+    (): SlidingPillItem<"today" | "tomorrow" | "upcoming" | "all">[] => [
+      {
+        id: "today",
+        label: "Today",
+        badge: (isActive) => (
+          <span
+            className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold transition-colors ${
+              isActive
+                ? "bg-stone-900 text-white"
+                : "bg-stone-300 text-stone-700"
+            }`}
+          >
+            {todayOrders.length}
+          </span>
+        ),
+      },
+      {
+        id: "tomorrow",
+        label: "Tomorrow",
+        badge: (isActive) => (
+          <span
+            className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold transition-colors ${
+              isActive
+                ? "bg-stone-900 text-white"
+                : "bg-stone-300 text-stone-700"
+            }`}
+          >
+            {tomorrowOrders.length}
+          </span>
+        ),
+      },
+      {
+        id: "upcoming",
+        label: "Upcoming",
+        badge: (isActive) => (
+          <span
+            className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold transition-colors ${
+              isActive
+                ? "bg-stone-900 text-white"
+                : "bg-stone-300 text-stone-700"
+            }`}
+          >
+            {upcomingOrders.length}
+          </span>
+        ),
+      },
+      {
+        id: "all",
+        label: "All",
+        badge: (isActive) => (
+          <span
+            className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold transition-colors ${
+              isActive
+                ? "bg-stone-900 text-white"
+                : "bg-stone-300 text-stone-700"
+            }`}
+          >
+            {orders.length}
+          </span>
+        ),
+      },
+    ],
+    [todayOrders.length, tomorrowOrders.length, upcomingOrders.length, orders.length]
+  );
 
   const todayRevenue = useMemo(() => {
     return todayOrders
@@ -884,7 +1151,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             quickOrderChannel === "walk_in" ? "Walk-In" : "Phone"
           } order #${data.order.id} (${currency} ${quickOrderTotal.toFixed(2)})`
         );
-        setIsQuickOrderOpen(false);
+        handleCloseQuickOrder();
         // Reset form fields
         setQuickCustomTitle("");
         setQuickCustomPrice("");
@@ -1152,6 +1419,31 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             <div className="flex items-center gap-1.5 justify-end w-full sm:w-auto">
               <button
                 type="button"
+                onClick={handleBellClick}
+                className="relative p-1.5 sm:p-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 active:scale-95 border border-stone-200/70 transition-all cursor-pointer"
+                title={
+                  newOrdersCount > 0
+                    ? `${newOrdersCount} New pending ${newOrdersCount === 1 ? "order" : "orders"}. Tap to jump.`
+                    : "No pending new orders"
+                }
+                aria-label="View New Orders"
+              >
+                <Bell
+                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-colors ${
+                    newOrdersCount > 0
+                      ? "text-rose-600 fill-rose-500"
+                      : "text-stone-500"
+                  }`}
+                />
+                {newOrdersCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-600 text-[9px] font-black text-white shadow-xs animate-pulse">
+                    {newOrdersCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={() => fetchOrders(pin)}
                 disabled={isLoadingOrders}
                 className="p-1.5 sm:p-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 active:scale-95 border border-stone-200/70 transition-all cursor-pointer"
@@ -1182,7 +1474,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             {/* Quick Order Button: Placed underneath Refresh/Shop/Lock on mobile, or inline on desktop */}
             <button
               type="button"
-              onClick={() => setIsQuickOrderOpen(true)}
+              onClick={openQuickOrder}
               className="w-full self-stretch sm:self-auto sm:w-auto px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-stone-900 hover:bg-black active:scale-[0.98] transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer order-last sm:order-first"
               title="Record Walk-in takeaway or Phone call order"
             >
@@ -1269,31 +1561,65 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Control 1: Today Same-Day Orders */}
                 <div
-                  className={`p-3 rounded-xl border transition-all ${
+                  className={`p-3.5 rounded-2xl border transition-all ${
                     storeStatus?.isTodayPaused
-                      ? "bg-rose-50/80 border-rose-200"
+                      ? "bg-rose-50/80 border-rose-300"
                       : "bg-stone-50/80 border-stone-200"
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-xs text-stone-900">
-                      1. Same-Day Deliveries (Today)
-                    </span>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-xs text-stone-900">
+                        1. Same-Day Deliveries (Today)
+                      </span>
+                      {/* Info Icon with Hover & Click Tooltip */}
+                      <div className="relative inline-flex items-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveInfoTooltip(
+                              activeInfoTooltip === "today" ? null : "today"
+                            );
+                          }}
+                          className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 transition-colors cursor-pointer group"
+                          aria-label="Info about Same-Day Deliveries"
+                        >
+                          <Info className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Tooltip on hover (desktop) or click (mobile/desktop) */}
+                        <div
+                          className={`absolute left-0 bottom-full mb-2 w-64 max-w-[85vw] p-2.5 bg-stone-900 text-white rounded-xl shadow-xl text-[11px] leading-relaxed z-40 transition-all pointer-events-none ${
+                            activeInfoTooltip === "today"
+                              ? "opacity-100 visible"
+                              : "opacity-0 invisible group-hover:opacity-100 group-hover:visible"
+                          }`}
+                        >
+                          <div className="font-bold text-white mb-0.5 flex items-center gap-1">
+                            <Info className="h-3 w-3 text-stone-400" />
+                            <span>Same-Day Orders Kill Switch</span>
+                          </div>
+                          <p className="text-stone-300 text-[11px] leading-normal">
+                            Instantly pauses same-day orders on your storefront when overwhelmed or running low on fresh blooms. Customers can only book for tomorrow onwards.
+                          </p>
+                          <div className="absolute left-3 -bottom-1 border-4 border-transparent border-t-stone-900" />
+                        </div>
+                      </div>
+                    </div>
+
                     <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                         storeStatus?.isTodayPaused
-                          ? "bg-rose-200 text-rose-900"
-                          : "bg-emerald-200 text-emerald-900"
+                          ? "bg-rose-100 text-rose-800 border-rose-300"
+                          : "bg-emerald-100 text-emerald-800 border-emerald-300"
                       }`}
                     >
                       {storeStatus?.isTodayPaused ? "PAUSED" : "ACTIVE"}
                     </span>
                   </div>
-                  <p className="text-[11px] text-stone-500 mb-3 leading-relaxed">
-                    {storeStatus?.isTodayPaused
-                      ? "Same-day orders are currently paused on storefront. Customers must order for tomorrow onwards."
-                      : "Store is currently accepting same-day orders. Tap below if overwhelmed or out of fresh stock."}
-                  </p>
+
+                  {/* Big Prominent Action Button */}
                   <button
                     type="button"
                     disabled={isUpdatingStatus}
@@ -1302,7 +1628,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                         isTodayPaused: !storeStatus?.isTodayPaused,
                       })
                     }
-                    className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                    className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-2xs active:scale-[0.99] cursor-pointer ${
                       storeStatus?.isTodayPaused
                         ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                         : "bg-rose-600 hover:bg-rose-700 text-white"
@@ -1310,12 +1636,12 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                   >
                     {storeStatus?.isTodayPaused ? (
                       <>
-                        <Play className="h-3.5 w-3.5" />
+                        <Play className="h-4 w-4 shrink-0 fill-current" />
                         <span>Resume Same-Day Deliveries</span>
                       </>
                     ) : (
                       <>
-                        <Pause className="h-3.5 w-3.5" />
+                        <Pause className="h-4 w-4 shrink-0 fill-current" />
                         <span>Emergency Pause Today</span>
                       </>
                     )}
@@ -1324,31 +1650,65 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
 
                 {/* Control 2: Tomorrow's Deliveries */}
                 <div
-                  className={`p-3 rounded-xl border transition-all ${
+                  className={`p-3.5 rounded-2xl border transition-all ${
                     storeStatus?.isTomorrowBlocked
-                      ? "bg-amber-50/80 border-amber-200"
+                      ? "bg-amber-50/80 border-amber-300"
                       : "bg-stone-50/80 border-stone-200"
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-xs text-stone-900">
-                      2. Deliveries (Tomorrow)
-                    </span>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-xs text-stone-900">
+                        2. Deliveries (Tomorrow)
+                      </span>
+                      {/* Info Icon with Hover & Click Tooltip */}
+                      <div className="relative inline-flex items-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveInfoTooltip(
+                              activeInfoTooltip === "tomorrow" ? null : "tomorrow"
+                            );
+                          }}
+                          className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 transition-colors cursor-pointer group"
+                          aria-label="Info about Tomorrow Deliveries"
+                        >
+                          <Info className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Tooltip on hover (desktop) or click (mobile/desktop) */}
+                        <div
+                          className={`absolute left-0 sm:right-0 sm:left-auto bottom-full mb-2 w-64 max-w-[85vw] p-2.5 bg-stone-900 text-white rounded-xl shadow-xl text-[11px] leading-relaxed z-40 transition-all pointer-events-none ${
+                            activeInfoTooltip === "tomorrow"
+                              ? "opacity-100 visible"
+                              : "opacity-0 invisible group-hover:opacity-100 group-hover:visible"
+                          }`}
+                        >
+                          <div className="font-bold text-white mb-0.5 flex items-center gap-1">
+                            <Info className="h-3 w-3 text-stone-400" />
+                            <span>Block Tomorrow Orders</span>
+                          </div>
+                          <p className="text-stone-300 text-[11px] leading-normal">
+                            Blocks tomorrow from checkout so customers cannot book tomorrow's date. Useful for public holidays, supplier delays, or studio rest days.
+                          </p>
+                          <div className="absolute left-3 sm:left-auto sm:right-3 -bottom-1 border-4 border-transparent border-t-stone-900" />
+                        </div>
+                      </div>
+                    </div>
+
                     <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                         storeStatus?.isTomorrowBlocked
-                          ? "bg-amber-200 text-amber-900"
-                          : "bg-emerald-200 text-emerald-900"
+                          ? "bg-amber-100 text-amber-800 border-amber-300"
+                          : "bg-emerald-100 text-emerald-800 border-emerald-300"
                       }`}
                     >
                       {storeStatus?.isTomorrowBlocked ? "BLOCKED" : "OPEN"}
                     </span>
                   </div>
-                  <p className="text-[11px] text-stone-500 mb-3 leading-relaxed">
-                    {storeStatus?.isTomorrowBlocked
-                      ? "Tomorrow is blocked from checkout. Customers cannot select tomorrow as delivery date."
-                      : "Tomorrow is open for orders. Tap below to block tomorrow (e.g. holiday, supplier delay, personal leave)."}
-                  </p>
+
+                  {/* Big Prominent Action Button */}
                   <button
                     type="button"
                     disabled={isUpdatingStatus}
@@ -1357,7 +1717,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                         isTomorrowBlocked: !storeStatus?.isTomorrowBlocked,
                       })
                     }
-                    className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                    className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-2xs active:scale-[0.99] cursor-pointer ${
                       storeStatus?.isTomorrowBlocked
                         ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                         : "bg-amber-600 hover:bg-amber-700 text-white"
@@ -1365,12 +1725,12 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                   >
                     {storeStatus?.isTomorrowBlocked ? (
                       <>
-                        <Check className="h-3.5 w-3.5" />
+                        <Check className="h-4 w-4 shrink-0 stroke-[2.5]" />
                         <span>Unblock &amp; Open Tomorrow</span>
                       </>
                     ) : (
                       <>
-                        <Ban className="h-3.5 w-3.5" />
+                        <Ban className="h-4 w-4 shrink-0" />
                         <span>Block Tomorrow</span>
                       </>
                     )}
@@ -1718,307 +2078,234 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           )}
         </div>
 
-        {/* KPI Metrics Dashboard Cards */}
-        <div className="grid grid-cols-3 gap-2.5">
-          {/* Card 1: Today Deliveries */}
-          <div className="bg-white rounded-2xl border border-stone-200/80 p-3 shadow-2xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-stone-400">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
-                Today
-              </span>
-              <Clock className="h-3.5 w-3.5 text-stone-400" />
-            </div>
-            <div className="mt-2">
-              <span className="text-xl font-black text-stone-900">
-                {todayOrders.length}
-              </span>
-              <span className="text-[11px] text-stone-500 ml-1">orders</span>
-            </div>
-            <div className="mt-1 text-[11px] font-semibold text-emerald-700">
-              {currency} {todayRevenue.toFixed(0)}
-            </div>
-          </div>
-
-          {/* Card 2: Tomorrow Deliveries */}
-          <div className="bg-white rounded-2xl border border-stone-200/80 p-3 shadow-2xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-stone-400">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
-                Tomorrow
-              </span>
-              <Calendar className="h-3.5 w-3.5 text-stone-400" />
-            </div>
-            <div className="mt-2">
-              <span className="text-xl font-black text-stone-900">
-                {tomorrowOrders.length}
-              </span>
-              <span className="text-[11px] text-stone-500 ml-1">orders</span>
-            </div>
-            <div className="mt-1 text-[11px] font-medium text-stone-500">
-              Prep ready
-            </div>
-          </div>
-
-          {/* Card 3: Month To Date Sales */}
-          <div className="bg-white rounded-2xl border border-stone-200/80 p-3 shadow-2xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-stone-400">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
-                This Month
-              </span>
-              <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
-            </div>
-            <div className="mt-2">
-              <span className="text-xl font-black text-stone-900">
-                {currency} {monthRevenue.toFixed(0)}
-              </span>
-            </div>
-            <div className="mt-1 text-[10px] text-stone-400">
-              Gross sales
-            </div>
-          </div>
-        </div>
-
-        {/* Unified Sales Channel Reconciliation Strip (Today's Breakdown) */}
-        <div className="bg-white rounded-2xl border border-stone-200/90 p-3.5 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <PieChart className="h-4 w-4 text-stone-700" />
-              <h3 className="text-xs font-bold text-stone-900">
-                Today&apos;s Sales 
-              </h3>
-            </div>
+        {/* Daily Financials & Channel Overview (Collapsible Progressive Disclosure) */}
+        <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden transition-all">
+          <div className="px-3.5 py-2.5 flex items-center justify-between gap-2.5">
             <button
               type="button"
-              onClick={() => setIsQuickOrderOpen(true)}
-              className="text-[11px] font-bold text-stone-700 hover:text-stone-900 inline-flex items-center gap-1 cursor-pointer hover:underline"
+              onClick={() => setShowFinancialSummary(!showFinancialSummary)}
+              className="flex items-center gap-2.5 min-w-0 text-left cursor-pointer group flex-1"
             >
-              <Plus className="h-3 w-3" />
-              <span>Record</span>
+              <div className="h-8 w-8 rounded-xl bg-stone-100 flex items-center justify-center text-stone-700 shrink-0 group-hover:bg-stone-200/70 transition-colors">
+                <PieChart className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-stone-900">
+                    Today&apos;s Financials
+                  </span>
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.2 rounded-full border border-emerald-200/80">
+                    {todayOrders.length} orders &bull; {currency} {todayRevenue.toFixed(0)}
+                  </span>
+                </div>
+                <div className="text-[10px] text-stone-400 truncate mt-0.5">
+                  {todayChannelStats.webCount} Web &bull; {todayChannelStats.walkInCount} Walk-In &bull; {todayChannelStats.phoneCount} Phone
+                </div>
+              </div>
             </button>
-          </div>
 
-          {/* 3 Channels Grid */}
-          <div className="grid grid-cols-3 gap-2 text-xs">
-            {/* Channel 1: Web Store */}
-            <div className="rounded-xl bg-sky-50/70 border border-sky-100 p-2.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-800 uppercase tracking-wider">
-                  <Globe className="h-2.5 w-2.5 text-sky-600" />
-                  <span>Web Shop</span>
-                </span>
-                <span className="text-[10px] font-semibold text-sky-600 bg-sky-100/80 px-1.5 py-0.2 rounded-md">
-                  {todayChannelStats.webCount}
-                </span>
-              </div>
-              <div className="mt-1.5 font-bold text-stone-900 text-xs">
-                {currency} {todayChannelStats.webRevenue.toFixed(0)}
-              </div>
-            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={openQuickOrder}
+                className="text-[11px] font-bold text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200/80 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Plus className="h-3 w-3" />
+                <span>Record</span>
+              </button>
 
-            {/* Channel 2: Walk-In Retail */}
-            <div className="rounded-xl bg-purple-50/70 border border-purple-100 p-2.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-800 uppercase tracking-wider">
-                  <Store className="h-2.5 w-2.5 text-purple-600" />
-                  <span>Walk-In</span>
-                </span>
-                <span className="text-[10px] font-semibold text-purple-600 bg-purple-100/80 px-1.5 py-0.2 rounded-md">
-                  {todayChannelStats.walkInCount}
-                </span>
-              </div>
-              <div className="mt-1.5 font-bold text-stone-900 text-xs">
-                {currency} {todayChannelStats.walkInRevenue.toFixed(0)}
-              </div>
-            </div>
-
-            {/* Channel 3: Phone Order */}
-            <div className="rounded-xl bg-amber-50/70 border border-amber-100 p-2.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 uppercase tracking-wider">
-                  <Phone className="h-2.5 w-2.5 text-amber-600" />
-                  <span>Phone</span>
-                </span>
-                <span className="text-[10px] font-semibold text-amber-600 bg-amber-100/80 px-1.5 py-0.2 rounded-md">
-                  {todayChannelStats.phoneCount}
-                </span>
-              </div>
-              <div className="mt-1.5 font-bold text-stone-900 text-xs">
-                {currency} {todayChannelStats.phoneRevenue.toFixed(0)}
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowFinancialSummary(!showFinancialSummary)}
+                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+                title={showFinancialSummary ? "Hide financials" : "View breakdown"}
+              >
+                {showFinancialSummary ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
             </div>
           </div>
 
-          {/* Payment Method Distribution Bar */}
-          <div className="pt-2 border-t border-stone-100 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-stone-600">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              Payment:
-            </span>
-            <div className="inline-flex items-center gap-1">
-              <Banknote className="h-3 w-3 text-emerald-600" />
-              <span>Cash:</span>
-              <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.cashTotal.toFixed(0)}</strong>
-            </div>
-            <div className="inline-flex items-center gap-1">
-              <QrCode className="h-3 w-3 text-pink-600" />
-              <span>DuitNow QR:</span>
-              <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.duitnowTotal.toFixed(0)}</strong>
-            </div>
-            <div className="inline-flex items-center gap-1">
-              <ShieldCheck className="h-3 w-3 text-sky-600" />
-              <span>TNG / QR:</span>
-              <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.tngTotal.toFixed(0)}</strong>
-            </div>
-            {todayChannelStats.transferTotal > 0 && (
-              <div className="inline-flex items-center gap-1">
-                <CreditCard className="h-3 w-3 text-blue-600" />
-                <span>Bank:</span>
-                <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.transferTotal.toFixed(0)}</strong>
+          {/* Expanded Analytics Details */}
+          {showFinancialSummary && (
+            <div className="p-3.5 pt-2 border-t border-stone-100 space-y-3 bg-stone-50/40">
+              {/* 3 KPI Cards */}
+              <div className="grid grid-cols-3 gap-2">
+                {/* Card 1: Today Deliveries */}
+                <div className="bg-white rounded-xl border border-stone-200/80 p-2.5 shadow-2xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-stone-400">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                      Today
+                    </span>
+                    <Clock className="h-3 w-3 text-stone-400" />
+                  </div>
+                  <div className="mt-1.5">
+                    <span className="text-lg font-black text-stone-900">
+                      {todayOrders.length}
+                    </span>
+                    <span className="text-[10px] text-stone-500 ml-1">orders</span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] font-semibold text-emerald-700">
+                    {currency} {todayRevenue.toFixed(0)}
+                  </div>
+                </div>
+
+                {/* Card 2: Tomorrow Deliveries */}
+                <div className="bg-white rounded-xl border border-stone-200/80 p-2.5 shadow-2xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-stone-400">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                      Tomorrow
+                    </span>
+                    <Calendar className="h-3 w-3 text-stone-400" />
+                  </div>
+                  <div className="mt-1.5">
+                    <span className="text-lg font-black text-stone-900">
+                      {tomorrowOrders.length}
+                    </span>
+                    <span className="text-[10px] text-stone-500 ml-1">orders</span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] font-medium text-stone-500">
+                    Prep ready
+                  </div>
+                </div>
+
+                {/* Card 3: Month To Date Sales */}
+                <div className="bg-white rounded-xl border border-stone-200/80 p-2.5 shadow-2xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-stone-400">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                      This Month
+                    </span>
+                    <DollarSign className="h-3 w-3 text-emerald-600" />
+                  </div>
+                  <div className="mt-1.5">
+                    <span className="text-lg font-black text-stone-900">
+                      {currency} {monthRevenue.toFixed(0)}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-stone-400">
+                    Gross sales
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* 3 Channels Grid */}
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                {/* Channel 1: Web Store */}
+                <div className="rounded-xl bg-white border border-stone-200/80 p-2.5 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-stone-700 uppercase tracking-wider">
+                      <Globe className="h-2.5 w-2.5 text-stone-500" />
+                      <span>Web Shop</span>
+                    </span>
+                    <span className="text-[10px] font-semibold text-stone-600 bg-stone-100 px-1.5 py-0.2 rounded-md">
+                      {todayChannelStats.webCount}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 font-bold text-stone-900 text-xs">
+                    {currency} {todayChannelStats.webRevenue.toFixed(0)}
+                  </div>
+                </div>
+
+                {/* Channel 2: Walk-In Retail */}
+                <div className="rounded-xl bg-white border border-stone-200/80 p-2.5 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-stone-700 uppercase tracking-wider">
+                      <Store className="h-2.5 w-2.5 text-stone-500" />
+                      <span>Walk-In</span>
+                    </span>
+                    <span className="text-[10px] font-semibold text-stone-600 bg-stone-100 px-1.5 py-0.2 rounded-md">
+                      {todayChannelStats.walkInCount}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 font-bold text-stone-900 text-xs">
+                    {currency} {todayChannelStats.walkInRevenue.toFixed(0)}
+                  </div>
+                </div>
+
+                {/* Channel 3: Phone Order */}
+                <div className="rounded-xl bg-white border border-stone-200/80 p-2.5 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-stone-700 uppercase tracking-wider">
+                      <Phone className="h-2.5 w-2.5 text-stone-500" />
+                      <span>Phone</span>
+                    </span>
+                    <span className="text-[10px] font-semibold text-stone-600 bg-stone-100 px-1.5 py-0.2 rounded-md">
+                      {todayChannelStats.phoneCount}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 font-bold text-stone-900 text-xs">
+                    {currency} {todayChannelStats.phoneRevenue.toFixed(0)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Method Distribution Bar */}
+              <div className="pt-2 border-t border-stone-200/70 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-stone-600">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                  Payment:
+                </span>
+                <div className="inline-flex items-center gap-1">
+                  <Banknote className="h-3 w-3 text-stone-500" />
+                  <span>Cash:</span>
+                  <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.cashTotal.toFixed(0)}</strong>
+                </div>
+                <div className="inline-flex items-center gap-1">
+                  <QrCode className="h-3 w-3 text-stone-500" />
+                  <span>DuitNow QR:</span>
+                  <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.duitnowTotal.toFixed(0)}</strong>
+                </div>
+                <div className="inline-flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3 text-stone-500" />
+                  <span>TNG / QR:</span>
+                  <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.tngTotal.toFixed(0)}</strong>
+                </div>
+                {todayChannelStats.transferTotal > 0 && (
+                  <div className="inline-flex items-center gap-1">
+                    <CreditCard className="h-3 w-3 text-stone-500" />
+                    <span>Bank:</span>
+                    <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.transferTotal.toFixed(0)}</strong>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* View Tabs & Search Bar */}
         <div className="space-y-2.5">
-          {/* Tabs */}
-          <div className="flex items-center rounded-2xl bg-stone-200/70 p-1 text-xs font-semibold text-stone-600">
-            <button
-              type="button"
-              onClick={() => setActiveTab("today")}
-              className={`flex-1 rounded-xl py-2 transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                activeTab === "today"
-                  ? "bg-white text-stone-900 shadow-xs"
-                  : "hover:text-stone-900"
-              }`}
-            >
-              <span>Today</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  activeTab === "today"
-                    ? "bg-stone-900 text-white"
-                    : "bg-stone-300 text-stone-700"
-                }`}
-              >
-                {todayOrders.length}
-              </span>
-            </button>
+          {/* Date View Tabs (Reusable SlidingPillTabs) */}
+          <SlidingPillTabs
+            variant="segmented"
+            items={dateTabItems}
+            activeId={activeTab}
+            onChange={(id) => {
+              setActiveTab(id);
+              scrollToOrders();
+            }}
+            activeColor="#ffffff"
+            activeTextColor="#1c1917"
+            pillClassName="rounded-xl shadow-xs"
+          />
 
-            <button
-              type="button"
-              onClick={() => setActiveTab("tomorrow")}
-              className={`flex-1 rounded-xl py-2 transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                activeTab === "tomorrow"
-                  ? "bg-white text-stone-900 shadow-xs"
-                  : "hover:text-stone-900"
-              }`}
-            >
-              <span>Tomorrow</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  activeTab === "tomorrow"
-                    ? "bg-stone-900 text-white"
-                    : "bg-stone-300 text-stone-700"
-                }`}
-              >
-                {tomorrowOrders.length}
+          {/* Channel Source Filter Pills (Reusable SlidingPillTabs) */}
+          <SlidingPillTabs
+            items={channelTabItems}
+            activeId={channelFilter}
+            onChange={(id) => {
+              setChannelFilter(id);
+              scrollToOrders();
+            }}
+            prefix={
+              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider shrink-0 mr-0.5">
+                SOURCE:
               </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("upcoming")}
-              className={`flex-1 rounded-xl py-2 transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                activeTab === "upcoming"
-                  ? "bg-white text-stone-900 shadow-xs"
-                  : "hover:text-stone-900"
-              }`}
-            >
-              <span>Upcoming</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  activeTab === "upcoming"
-                    ? "bg-stone-900 text-white"
-                    : "bg-stone-300 text-stone-700"
-                }`}
-              >
-                {upcomingOrders.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("all")}
-              className={`flex-1 rounded-xl py-2 transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                activeTab === "all"
-                  ? "bg-white text-stone-900 shadow-xs"
-                  : "hover:text-stone-900"
-              }`}
-            >
-              <span>All</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  activeTab === "all"
-                    ? "bg-stone-900 text-white"
-                    : "bg-stone-300 text-stone-700"
-                }`}
-              >
-                {orders.length}
-              </span>
-            </button>
-          </div>
-
-          {/* Channel Source Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs">
-            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider shrink-0 mr-0.5">
-              Source:
-            </span>
-            <button
-              type="button"
-              onClick={() => setChannelFilter("all")}
-              className={`px-2.5 py-1 rounded-xl font-medium transition-all cursor-pointer whitespace-nowrap text-xs ${
-                channelFilter === "all"
-                  ? "bg-stone-900 text-white font-bold shadow-2xs"
-                  : "bg-white text-stone-600 border border-stone-200/80 hover:bg-stone-50"
-              }`}
-            >
-              All Channels
-            </button>
-            <button
-              type="button"
-              onClick={() => setChannelFilter("web")}
-              className={`px-2.5 py-1 rounded-xl font-medium transition-all cursor-pointer whitespace-nowrap text-xs inline-flex items-center gap-1 ${
-                channelFilter === "web"
-                  ? "bg-sky-700 text-white font-bold shadow-2xs"
-                  : "bg-white text-stone-600 border border-stone-200/80 hover:bg-stone-50"
-              }`}
-            >
-              <Globe className="h-3 w-3" />
-              <span>Web Orders</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setChannelFilter("walk_in")}
-              className={`px-2.5 py-1 rounded-xl font-medium transition-all cursor-pointer whitespace-nowrap text-xs inline-flex items-center gap-1 ${
-                channelFilter === "walk_in"
-                  ? "bg-purple-700 text-white font-bold shadow-2xs"
-                  : "bg-white text-stone-600 border border-stone-200/80 hover:bg-stone-50"
-              }`}
-            >
-              <Store className="h-3 w-3" />
-              <span>Walk-In</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setChannelFilter("phone")}
-              className={`px-2.5 py-1 rounded-xl font-medium transition-all cursor-pointer whitespace-nowrap text-xs inline-flex items-center gap-1 ${
-                channelFilter === "phone"
-                  ? "bg-amber-700 text-white font-bold shadow-2xs"
-                  : "bg-white text-stone-600 border border-stone-200/80 hover:bg-stone-50"
-              }`}
-            >
-              <Phone className="h-3 w-3" />
-              <span>Phone Orders</span>
-            </button>
-          </div>
+            }
+            size="sm"
+            inactiveClassName="bg-stone-100 text-stone-600 hover:bg-stone-200/80"
+          />
 
           {/* Search Box */}
           <div className="relative">
@@ -2028,7 +2315,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               placeholder="Search recipient name, phone, address, or bouquet..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-stone-200/90 bg-white pl-10 pr-4 py-2.5 text-xs text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900 shadow-2xs"
+              className="w-full rounded-xl border border-stone-200/90 bg-white pl-10 pr-4 py-2 text-xs text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900 shadow-2xs"
             />
             {searchQuery && (
               <button
@@ -2060,331 +2347,19 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredOrders.map((order) => {
-              const statusBadge = getStatusBadge(order.fulfillmentStatus);
-              const isUpdating = updatingOrderId === order.id;
-
-              return (
-                <div
-                  key={order.id}
-                  className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden transition-all hover:shadow-xs"
-                >
-                  {/* Card Header: Slot & Status */}
-                  <div className="bg-stone-50/80 px-4 py-2.5 border-b border-stone-200/60 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 font-bold text-xs text-stone-900 flex-wrap">
-                      {/* Channel Badge */}
-                      {order.orderSource === "walk_in" ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-bold">
-                          <Store className="h-2.5 w-2.5 text-purple-600 shrink-0" />
-                          <span>Walk-In</span>
-                        </span>
-                      ) : order.orderSource === "phone" ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-bold">
-                          <Phone className="h-2.5 w-2.5 text-amber-600 shrink-0" />
-                          <span>Phone Order</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 text-[10px] font-semibold">
-                          <Globe className="h-2.5 w-2.5 text-sky-600 shrink-0" />
-                          <span>Web</span>
-                        </span>
-                      )}
-
-                      <Clock className="h-3.5 w-3.5 text-stone-500 shrink-0" />
-                      <span>{order.deliveryDate}</span>
-                      <span className="text-stone-400">&bull;</span>
-                      <span className="text-stone-800">{order.deliveryTimeSlot}</span>
-
-                      {isRushOrder(order) && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
-                          <Zap className="h-2.5 w-2.5 text-amber-600 fill-amber-500 shrink-0" />
-                          <span>Rush Order</span>
-                        </span>
-                      )}
-
-                      {order.holidayName && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-bold">
-                          <span>{order.holidayName}</span>
-                          {order.holidaySurcharge ? <span>(+{currency} {order.holidaySurcharge.toFixed(0)})</span> : null}
-                        </span>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => openRescheduleModal(order)}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-stone-300 text-[10px] font-semibold text-stone-700 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer shadow-2xs ml-1"
-                        title="Change delivery time slot or WhatsApp proposal"
-                      >
-                        <Clock className="h-2.5 w-2.5 text-stone-500" />
-                        <span>Reschedule</span>
-                      </button>
-                    </div>
-
-                    {/* Status Pill & Dropdown */}
-                    <div className="relative inline-flex items-center">
-                      <select
-                        value={order.fulfillmentStatus}
-                        onChange={(e) =>
-                          handleStatusChange(order.id, e.target.value as FulfillmentStatus)
-                        }
-                        disabled={isUpdating}
-                        className={`text-[11px] font-bold rounded-lg border px-2.5 py-1 appearance-none pr-6 cursor-pointer focus:outline-none transition-colors ${statusBadge.bg}`}
-                      >
-                        <option value="new">New Order</option>
-                        <option value="preparing">Arranging Bouquet</option>
-                        <option value="ready">Ready for Pickup / Rider</option>
-                        <option value="dispatched">Out with Rider</option>
-                        <option value="completed">Delivered &amp; Done</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-1.5 h-3 w-3 text-stone-600" />
-                    </div>
-                  </div>
-
-                  {/* Card Body */}
-                  <div className="p-4 space-y-3.5">
-                    {/* Rush Order Alert Banner with 1-Tap Reschedule Call-to-Action */}
-                    {isRushOrder(order) && (
-                      <div className="flex items-center justify-between rounded-xl border border-amber-300/80 bg-amber-50/90 p-2.5 text-xs text-amber-950 shadow-2xs">
-                        <div className="flex items-center gap-2 min-w-0 pr-2">
-                          <Zap className="h-4 w-4 text-amber-600 fill-amber-500 shrink-0" />
-                          <div className="text-[11px] leading-tight">
-                            <span className="font-bold">⚡ Same-Day Rush:</span>{" "}
-                            <span className="text-amber-900">Ordered close to slot window.</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => openRescheduleModal(order)}
-                          className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
-                        >
-                          <Clock className="h-3 w-3" />
-                          <span>Reschedule</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Product & Addons Strip */}
-                    <div className="flex items-start gap-3">
-                      <div className="relative h-16 w-16 rounded-xl bg-stone-100 overflow-hidden border border-stone-200/70 shrink-0">
-                        <Image
-                          src={order.product.image}
-                          alt={order.product.name}
-                          fill
-                          sizes="64px"
-                          className="object-cover"
-                        />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-bold text-stone-900 leading-snug">
-                            {order.product.name}
-                          </h4>
-                          <span className="text-xs font-bold text-stone-900 shrink-0">
-                            {currency} {order.product.price.toFixed(2)}
-                          </span>
-                        </div>
-
-                        {/* Add-ons badges */}
-                        {order.addons && order.addons.length > 0 && (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {order.addons.map((addon) => (
-                              <span
-                                key={addon.id}
-                                className="inline-flex items-center gap-1 rounded-md bg-stone-100 border border-stone-200 px-1.5 py-0.5 text-[10px] font-semibold text-stone-700"
-                              >
-                                <Sparkles className="h-2.5 w-2.5 text-amber-500" />
-                                <span>{addon.name}</span>
-                                <span className="text-stone-400 font-normal">
-                                  (+{currency} {addon.price.toFixed(0)})
-                                </span>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Recipient & Delivery Details */}
-                    <div className="rounded-xl bg-stone-50 p-3 border border-stone-200/60 space-y-2 text-xs">
-                      {/* Recipient Name & Phone */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="font-bold text-stone-900 text-sm">
-                            {order.recipient.name}
-                          </div>
-                          {order.fulfillmentMethod === "delivery" ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-800 bg-sky-100 px-1.5 py-0.5 rounded-md border border-sky-200">
-                              <Truck className="h-2.5 w-2.5" />
-                              <span>Delivery</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded-md border border-emerald-200">
-                              <Store className="h-2.5 w-2.5" />
-                              <span>Self-Pickup</span>
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Quick Call & WhatsApp Links */}
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openRescheduleModal(order)}
-                            className="p-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 shadow-2xs transition-colors cursor-pointer"
-                            title="Reschedule delivery slot"
-                          >
-                            <Clock className="h-3.5 w-3.5" />
-                          </button>
-                          <a
-                            href={`tel:${order.recipient.phone}`}
-                            className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-700 hover:text-stone-900 hover:bg-stone-50 shadow-2xs transition-colors"
-                            title="Call recipient"
-                          >
-                            <Phone className="h-3.5 w-3.5" />
-                          </a>
-                          <a
-                            href={`https://wa.me/${cleanPhone(order.recipient.phone)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg bg-[#25D366]/10 border border-[#25D366]/30 text-[#128C7E] hover:bg-[#25D366]/20 shadow-2xs transition-colors"
-                            title="WhatsApp recipient"
-                          >
-                            <MessageCircle className="h-3.5 w-3.5" />
-                          </a>
-                        </div>
-                      </div>
-
-                      {/* Address for Delivery */}
-                      {order.fulfillmentMethod === "delivery" && order.recipient.deliveryAddress && (
-                        <div className="pt-1 border-t border-stone-200/50">
-                          <div className="flex items-start gap-1.5 text-stone-700">
-                            <MapPin className="h-3.5 w-3.5 text-stone-400 shrink-0 mt-0.5" />
-                            <div className="flex-1 text-[11px] leading-relaxed">
-                              <span>{order.recipient.deliveryAddress}</span>
-                              {order.deliveryZoneName && (
-                                <span className="block text-[10px] font-semibold text-stone-500 mt-0.5">
-                                  Zone: {order.deliveryZoneName}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Quick Rider Action Bar */}
-                          <div className="mt-2.5 flex items-center gap-2 pt-1 border-t border-stone-200/40">
-                            <button
-                              type="button"
-                              onClick={() => copyLalamoveInfo(order)}
-                              className="flex-1 py-1.5 px-2.5 rounded-lg bg-white border border-stone-300 text-[11px] font-semibold text-stone-800 hover:bg-stone-100 flex items-center justify-center gap-1.5 shadow-2xs active:scale-98 transition-all cursor-pointer"
-                            >
-                              {copiedId === order.id + "_rider" ? (
-                                <>
-                                  <Check className="h-3 w-3 text-emerald-600" />
-                                  <span className="text-emerald-700 font-bold">Copied for Rider!</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="h-3 w-3 text-stone-500" />
-                                  <span>Copy for Lalamove / Grab</span>
-                                </>
-                              )}
-                            </button>
-
-                            <a
-                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                order.recipient.deliveryAddress
-                              )}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="py-1.5 px-2.5 rounded-lg bg-white border border-stone-300 text-[11px] font-semibold text-stone-700 hover:text-stone-900 hover:bg-stone-100 flex items-center justify-center gap-1 shadow-2xs transition-colors"
-                              title="Open in Google Maps"
-                            >
-                              <ExternalLink className="h-3 w-3 text-stone-500" />
-                              <span>Maps</span>
-                            </a>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Notes / Special Instructions */}
-                      {order.notes && (
-                        <div className="text-[11px] text-amber-900 bg-amber-50/70 p-2 rounded-lg border border-amber-200/50">
-                          <strong className="font-semibold">Notes:</strong> {order.notes}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Greeting Card Message Box */}
-                    {order.cardMessage && (
-                      <div className="rounded-xl border border-rose-200/80 bg-rose-50/40 p-3">
-                        <div className="flex items-center justify-between text-[11px] font-bold text-rose-950 uppercase tracking-wider mb-1">
-                          <span>Florist Card Message</span>
-                          <button
-                            type="button"
-                            onClick={() => copyCardMessage(order)}
-                            className="inline-flex items-center gap-1 font-semibold text-[10px] text-rose-700 hover:text-rose-900 hover:underline cursor-pointer"
-                          >
-                            {copiedId === order.id + "_card" ? (
-                              <>
-                                <Check className="h-2.5 w-2.5 text-emerald-600" />
-                                <span className="text-emerald-700 font-bold">Copied</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="h-2.5 w-2.5 text-rose-500" />
-                                <span>Copy Text</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                        <p className="text-xs italic text-stone-800 leading-relaxed pl-2 border-l-2 border-rose-400">
-                          &ldquo;{order.cardMessage}&rdquo;
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Order Financials Footer */}
-                    <div className="flex items-center justify-between pt-2 border-t border-stone-100 text-xs">
-                      {order.paymentMode === "cash" ? (
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          <Banknote className="h-3 w-3 text-emerald-600" />
-                          <span>Paid in Cash</span>
-                        </div>
-                      ) : order.paymentMode === "duitnow_qr" ? (
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-pink-800 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-200">
-                          <QrCode className="h-3 w-3 text-pink-600" />
-                          <span>Paid via DuitNow QR</span>
-                        </div>
-                      ) : order.paymentMode === "bank_transfer" ? (
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                          <CreditCard className="h-3 w-3 text-blue-600" />
-                          <span>Bank Transfer</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          <ShieldCheck className="h-3 w-3 text-emerald-600" />
-                          <span>Paid via Touch &apos;n Go</span>
-                        </div>
-                      )}
-
-                      <div className="flex items-baseline gap-1.5 flex-wrap justify-end">
-                        {order.holidaySurcharge && order.holidaySurcharge > 0 ? (
-                          <span className="text-[10px] font-semibold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
-                            Incl. {order.holidayName || "Holiday"} (+{currency} {order.holidaySurcharge.toFixed(0)})
-                          </span>
-                        ) : null}
-                        <span className="text-[11px] text-stone-400">Grand Total:</span>
-                        <span className="text-sm font-bold text-stone-900">
-                          {currency} {order.totalAmount.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="space-y-3.5">
+            {filteredOrders.map((order) => (
+              <FloristOrderCard
+                key={order.id}
+                order={order}
+                currency={currency}
+                onStatusChange={handleStatusChange}
+                onOpenReschedule={openRescheduleModal}
+                onCopyLalamove={copyLalamoveInfo}
+                cleanPhone={cleanPhone}
+                showToast={showToast}
+              />
+            ))}
           </div>
         )}
       </main>
@@ -2410,8 +2385,21 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
         );
 
         return (
-          <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-            <div className="bg-white rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden animate-scale-up">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Reschedule Delivery Slot"
+            onClick={closeRescheduleModal}
+            className={`fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto cursor-pointer ${
+              isRescheduleClosing ? "modal-backdrop-exit" : "modal-backdrop-enter"
+            }`}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`bg-white rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden cursor-default ${
+                isRescheduleClosing ? "modal-content-exit" : "modal-content-enter"
+              }`}
+            >
               {/* Header */}
               <div className="px-5 py-4 border-b border-stone-200/80 flex items-center justify-between bg-stone-50/80">
                 <div>
@@ -2469,11 +2457,33 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                   <div className="flex items-center gap-2 mb-2">
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        const validTodaySlots = availableSlots.filter(
+                          (s) =>
+                            !isSlotPassed(
+                              todayStr,
+                              s,
+                              store.deliveryTimeConfig?.slots
+                            )
+                        );
                         setRescheduleState((prev) =>
-                          prev ? { ...prev, deliveryDate: todayStr } : prev
-                        )
-                      }
+                          prev
+                            ? {
+                                ...prev,
+                                deliveryDate: todayStr,
+                                deliveryTimeSlot:
+                                  prev.deliveryTimeSlot &&
+                                  !isSlotPassed(
+                                    todayStr,
+                                    prev.deliveryTimeSlot,
+                                    store.deliveryTimeConfig?.slots
+                                  )
+                                    ? prev.deliveryTimeSlot
+                                    : validTodaySlots[0] || "",
+                              }
+                            : prev
+                        );
+                      }}
                       className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                         rescheduleState.deliveryDate === todayStr
                           ? "bg-stone-900 text-white border-stone-900 shadow-2xs"
@@ -2486,7 +2496,16 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                       type="button"
                       onClick={() =>
                         setRescheduleState((prev) =>
-                          prev ? { ...prev, deliveryDate: tomorrowStr } : prev
+                          prev
+                            ? {
+                                ...prev,
+                                deliveryDate: tomorrowStr,
+                                deliveryTimeSlot:
+                                  prev.deliveryTimeSlot ||
+                                  availableSlots[0] ||
+                                  "",
+                              }
+                            : prev
                         )
                       }
                       className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
@@ -2510,8 +2529,35 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                         );
                         showToast("Cannot select a date in the past.");
                       } else {
+                        const isTargetToday = val === todayStr;
+                        const validSlots = isTargetToday
+                          ? availableSlots.filter(
+                              (s) =>
+                                !isSlotPassed(
+                                  todayStr,
+                                  s,
+                                  store.deliveryTimeConfig?.slots
+                                )
+                            )
+                          : availableSlots;
+
                         setRescheduleState((prev) =>
-                          prev ? { ...prev, deliveryDate: val } : prev
+                          prev
+                            ? {
+                                ...prev,
+                                deliveryDate: val,
+                                deliveryTimeSlot:
+                                  prev.deliveryTimeSlot &&
+                                  (!isTargetToday ||
+                                    !isSlotPassed(
+                                      val,
+                                      prev.deliveryTimeSlot,
+                                      store.deliveryTimeConfig?.slots
+                                    ))
+                                    ? prev.deliveryTimeSlot
+                                    : validSlots[0] || "",
+                              }
+                            : prev
                         );
                       }
                     }}
@@ -2530,44 +2576,72 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto p-1 rounded-xl bg-stone-50 border border-stone-200/60">
-                    {availableSlots.map((slot) => {
-                      const isSelected =
-                        !rescheduleState.customTimeSlot &&
-                        rescheduleState.deliveryTimeSlot === slot;
-                      return (
-                        <button
-                          key={slot}
-                          type="button"
-                          onClick={() =>
-                            setRescheduleState((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    deliveryTimeSlot: slot,
-                                    customTimeSlot: "",
-                                  }
-                                : prev
-                            )
-                          }
-                          className={`px-2.5 py-2 rounded-lg text-left text-xs font-medium border transition-all cursor-pointer flex items-center justify-between ${
-                            isSelected
-                              ? "bg-white font-bold text-stone-900 border-stone-900 shadow-xs"
-                              : "bg-white/80 text-stone-700 border-stone-200/70 hover:bg-white"
-                          }`}
-                        >
-                          <span className="truncate">{slot}</span>
-                          {isSelected && <Check className="h-3 w-3 text-emerald-600 shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {availableSlotsForReschedule.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto p-1 rounded-xl bg-stone-50 border border-stone-200/60">
+                      {availableSlotsForReschedule.map((slot) => {
+                        const isSelected =
+                          !rescheduleState.customTimeSlot &&
+                          rescheduleState.deliveryTimeSlot === slot;
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() =>
+                              setRescheduleState((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      deliveryTimeSlot: slot,
+                                      customTimeSlot: "",
+                                    }
+                                  : prev
+                              )
+                            }
+                            className={`px-2.5 py-2 rounded-lg text-left text-xs font-medium border transition-all cursor-pointer flex items-center justify-between ${
+                              isSelected
+                                ? "bg-white font-bold text-stone-900 border-stone-900 shadow-xs"
+                                : "bg-white/80 text-stone-700 border-stone-200/70 hover:bg-white"
+                            }`}
+                          >
+                            <span className="truncate">{slot}</span>
+                            {isSelected && (
+                              <Check className="h-3 w-3 text-emerald-600 shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-3.5 text-center space-y-2">
+                      <p className="text-xs font-semibold text-stone-700">
+                        All standard delivery slots for today have ended.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRescheduleState((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  deliveryDate: tomorrowStr,
+                                  deliveryTimeSlot: availableSlots[0] || "",
+                                }
+                              : prev
+                          )
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-900 text-white text-xs font-semibold hover:bg-black transition-colors cursor-pointer"
+                      >
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>Switch to Tomorrow ({tomorrowStr})</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Or Custom Slot Input */}
                   <div className="mt-2">
                     <input
                       type="text"
-                      placeholder="Or enter custom slot (e.g. 04:30 PM sharp, or Afternoon 3-4pm)"
+                      placeholder="Or enter custom slot (e.g. 07:30 PM sharp, or Evening 7-8pm)"
                       value={rescheduleState.customTimeSlot}
                       onChange={(e) =>
                         setRescheduleState((prev) =>
@@ -2578,9 +2652,9 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     />
                   </div>
 
-                  {/* Dynamic Rush Status Impact Indicator */}
+                  {/* Dynamic Rush / Past Status Impact Indicator */}
                   {(() => {
-                    const isProposedSlotRush = checkIfSlotIsRush(
+                    const slotStatus = getSlotTimeStatus(
                       rescheduleState.deliveryDate,
                       effectiveSlot,
                       store.deliveryTimeConfig?.rushThresholdMinutes ?? 45,
@@ -2588,7 +2662,17 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     );
                     return (
                       <div className="mt-2.5">
-                        {isProposedSlotRush ? (
+                        {slotStatus === "past" ? (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-50 border border-rose-300 text-rose-950 text-xs">
+                            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                            <div>
+                              <span className="font-bold">⚠️ Time Slot Passed:</span>{" "}
+                              <span className="text-rose-900">
+                                This time has already ended today. Please select an upcoming slot.
+                              </span>
+                            </div>
+                          </div>
+                        ) : slotStatus === "rush" ? (
                           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs">
                             <Zap className="h-4 w-4 text-amber-600 fill-amber-500 shrink-0" />
                             <div>
@@ -2665,24 +2749,37 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     Cancel
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleSaveReschedule}
-                    disabled={isSavingSlot}
-                    className="flex-1 sm:flex-none py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-black text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                  >
-                    {isSavingSlot ? (
-                      <>
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                        <span>Updating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="h-3.5 w-3.5" />
-                        <span>Save &amp; Update Slot</span>
-                      </>
-                    )}
-                  </button>
+                  {(() => {
+                    const slotStatus = getSlotTimeStatus(
+                      rescheduleState.deliveryDate,
+                      effectiveSlot,
+                      store.deliveryTimeConfig?.rushThresholdMinutes ?? 45,
+                      store.deliveryTimeConfig?.slots
+                    );
+                    const isSaveDisabled =
+                      isSavingSlot || slotStatus === "past" || !effectiveSlot;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleSaveReschedule}
+                        disabled={isSaveDisabled}
+                        className="flex-1 sm:flex-none py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-black text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {isSavingSlot ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            <span>Updating...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="h-3.5 w-3.5" />
+                            <span>Save &amp; Update Slot</span>
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -2694,8 +2791,21 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
       {/* MODAL: QUICK ORDER (WALK-IN & PHONE ORDER COUNTER POS)       */}
       {/* ============================================================ */}
       {isQuickOrderOpen && (
-        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden animate-scale-up">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Quick Record Order"
+          onClick={handleCloseQuickOrder}
+          className={`fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto cursor-pointer ${
+            isQuickOrderClosing ? "modal-backdrop-exit" : "modal-backdrop-enter"
+          }`}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`bg-white rounded-3xl max-w-xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden cursor-default ${
+              isQuickOrderClosing ? "modal-content-exit" : "modal-content-enter"
+            }`}
+          >
             {/* Modal Header */}
             <div className="px-5 py-3.5 border-b border-stone-200/80 flex items-center justify-between bg-stone-50/90">
               <div className="flex items-center gap-2">
@@ -2714,7 +2824,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
 
               <button
                 type="button"
-                onClick={() => setIsQuickOrderOpen(false)}
+                onClick={handleCloseQuickOrder}
                 className="p-1.5 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
@@ -3159,7 +3269,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               <div className="pt-2 flex items-center gap-2 justify-end">
                 <button
                   type="button"
-                  onClick={() => setIsQuickOrderOpen(false)}
+                  onClick={handleCloseQuickOrder}
                   className="px-4 py-2.5 rounded-xl border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 font-semibold text-xs transition-colors cursor-pointer"
                 >
                   Cancel

@@ -263,6 +263,95 @@ export function parseSlotRange(
   };
 }
 
+export type SlotTimeStatus = "past" | "rush" | "standard";
+
+/**
+ * Determines whether a delivery time slot on a specific date is:
+ * - "past": Cutoff / delivery window has already ended in the past.
+ * - "rush": Slot is today and within rush threshold (or currently ongoing).
+ * - "standard": Slot is upcoming with ample preparation time (or on a future date).
+ */
+export function getSlotTimeStatus(
+  targetDate: string,
+  targetSlot: string,
+  thresholdMinutes: number = 45,
+  slotsConfig?: DeliveryTimeSlot[]
+): SlotTimeStatus {
+  if (!targetDate || !targetSlot) return "standard";
+
+  const now = new Date();
+  const todayStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kuala_Lumpur",
+  }).format(now);
+
+  // Past dates
+  if (targetDate < todayStr) {
+    return "past";
+  }
+
+  // Future dates (tomorrow or beyond): all operating slots are valid standard windows
+  if (targetDate > todayStr) {
+    return "standard";
+  }
+
+  // Target date is Today (Asia/Kuala_Lumpur)
+  const klParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kuala_Lumpur",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+
+  const curHour = parseInt(klParts.find((p) => p.type === "hour")?.value || "0", 10);
+  const curMin = parseInt(klParts.find((p) => p.type === "minute")?.value || "0", 10);
+  const currentTotalMinutes = curHour * 60 + curMin;
+
+  let startMinutes: number | null = null;
+  let endMinutes: number | null = null;
+
+  if (slotsConfig && slotsConfig.length > 0) {
+    const matched = slotsConfig.find((s) => {
+      const labelWithHours = s.hours ? `${s.label} (${s.hours})` : s.label;
+      return (
+        s.label === targetSlot ||
+        labelWithHours === targetSlot ||
+        s.id === targetSlot
+      );
+    });
+    if (matched) {
+      startMinutes = (matched.cutoffHour - 1) * 60;
+      endMinutes = matched.cutoffHour * 60 + (matched.cutoffMinute ?? 0);
+    }
+  }
+
+  if (startMinutes === null || endMinutes === null) {
+    const range = parseSlotRange(targetSlot);
+    if (range) {
+      startMinutes = range.startMinutes;
+      endMinutes = range.endMinutes;
+    }
+  }
+
+  if (startMinutes === null || endMinutes === null) {
+    return "standard";
+  }
+
+  // 1. Cutoff has passed
+  if (currentTotalMinutes >= endMinutes) {
+    return "past";
+  }
+
+  // 2. Rush window (active ongoing window or starts within threshold)
+  if (currentTotalMinutes >= startMinutes && currentTotalMinutes < endMinutes) {
+    return "rush";
+  }
+  if (startMinutes > currentTotalMinutes && startMinutes - currentTotalMinutes <= thresholdMinutes) {
+    return "rush";
+  }
+
+  return "standard";
+}
+
 /**
  * Checks whether a given delivery date and slot qualifies as a Same-Day Rush Order.
  *
@@ -277,68 +366,23 @@ export function checkIfSlotIsRush(
   thresholdMinutes: number = 45,
   slotsConfig?: DeliveryTimeSlot[]
 ): boolean {
-  if (!targetDate || !targetSlot) return false;
+  return (
+    getSlotTimeStatus(targetDate, targetSlot, thresholdMinutes, slotsConfig) ===
+    "rush"
+  );
+}
 
-  // 1. Must be today in Malaysia Time (Asia/Kuala_Lumpur)
-  const now = new Date();
-  const todayStr = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kuala_Lumpur",
-  }).format(now);
-
-  if (targetDate !== todayStr) {
-    return false; // Future or past dates are never same-day rush
-  }
-
-  // 2. Current time in minutes from midnight (in Asia/Kuala_Lumpur)
-  const klParts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Kuala_Lumpur",
-    hour: "numeric",
-    minute: "numeric",
-    hour12: false,
-  }).formatToParts(now);
-
-  const curHour = parseInt(klParts.find((p) => p.type === "hour")?.value || "0", 10);
-  const curMin = parseInt(klParts.find((p) => p.type === "minute")?.value || "0", 10);
-  const currentTotalMinutes = curHour * 60 + curMin;
-
-  // 3. Match against configured slots if provided
-  if (slotsConfig && slotsConfig.length > 0) {
-    const matched = slotsConfig.find((s) => {
-      const labelWithHours = s.hours ? `${s.label} (${s.hours})` : s.label;
-      return (
-        s.label === targetSlot ||
-        labelWithHours === targetSlot ||
-        s.id === targetSlot
-      );
-    });
-    if (matched) {
-      const startHour = matched.cutoffHour - 1;
-      const startMinutes = startHour * 60;
-      const endMinutes = matched.cutoffHour * 60 + (matched.cutoffMinute ?? 0);
-
-      if (currentTotalMinutes >= startMinutes && currentTotalMinutes < endMinutes) {
-        return true;
-      }
-      if (startMinutes > currentTotalMinutes && startMinutes - currentTotalMinutes <= thresholdMinutes) {
-        return true;
-      }
-      return false;
-    }
-  }
-
-  // 4. Fallback: Parse from time string
-  const range = parseSlotRange(targetSlot);
-  if (range) {
-    if (currentTotalMinutes >= range.startMinutes && currentTotalMinutes < range.endMinutes) {
-      return true;
-    }
-    if (range.startMinutes > currentTotalMinutes && range.startMinutes - currentTotalMinutes <= thresholdMinutes) {
-      return true;
-    }
-    return false;
-  }
-
-  return false;
+/**
+ * Checks whether a given delivery date and slot has already passed.
+ */
+export function isSlotPassed(
+  targetDate: string,
+  targetSlot: string,
+  slotsConfig?: DeliveryTimeSlot[]
+): boolean {
+  return (
+    getSlotTimeStatus(targetDate, targetSlot, 45, slotsConfig) === "past"
+  );
 }
 
 // Modular Tenant Stores Data (Loaded from dedicated stores.data.ts)

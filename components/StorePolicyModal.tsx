@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { StoreConfig } from "@/config/stores";
 import {
   AlertCircle,
@@ -28,6 +28,16 @@ export const StorePolicyModal: React.FC<StorePolicyModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>(initialTab);
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleDismiss = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 260);
+  }, [isClosing, onClose]);
 
   // Close on Escape key press and lock background scroll
   useEffect(() => {
@@ -35,7 +45,7 @@ export const StorePolicyModal: React.FC<StorePolicyModalProps> = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        handleDismiss();
       }
     };
 
@@ -47,7 +57,7 @@ export const StorePolicyModal: React.FC<StorePolicyModalProps> = ({
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, handleDismiss]);
 
   if (!isOpen) return null;
 
@@ -58,16 +68,23 @@ export const StorePolicyModal: React.FC<StorePolicyModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="store-policy-modal-title"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 ${
+        isClosing ? "modal-backdrop-exit" : "modal-backdrop-enter"
+      }`}
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs transition-opacity"
-        onClick={onClose}
+        className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs cursor-pointer"
+        onClick={handleDismiss}
       />
 
       {/* Modal Dialog Content */}
-      <div className="relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl transition-all overflow-hidden border border-stone-200/80 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl overflow-hidden border border-stone-200/80 cursor-default ${
+          isClosing ? "modal-content-exit" : "modal-content-enter"
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/80 px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -95,7 +112,7 @@ export const StorePolicyModal: React.FC<StorePolicyModalProps> = ({
             {store.enableLanguageSelector !== false && <LanguageSelector />}
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleDismiss}
               className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-white text-stone-400 hover:bg-stone-100 hover:text-stone-700 shadow-2xs transition-colors cursor-pointer"
               aria-label="Close modal"
             >

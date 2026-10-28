@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { X, ShoppingBag, Sparkles, ZoomIn, Ban } from "lucide-react";
 import { Product, StoreConfig, getProductLocalized } from "@/config/stores";
@@ -25,6 +25,16 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
 }) => {
   const { t, locale, getCategory } = useTranslation();
   const localized = product ? getProductLocalized(product, locale) : null;
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleDismiss = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 260);
+  }, [isClosing, onClose]);
 
   // Close on Escape key press
   useEffect(() => {
@@ -32,7 +42,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        handleDismiss();
       }
     };
 
@@ -45,7 +55,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, handleDismiss]);
 
   if (!isOpen || !product) return null;
 
@@ -53,7 +63,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
   const currency = store?.currency || "RM";
 
   const handleOrder = () => {
-    onClose();
+    handleDismiss();
     if (onOrderNow) {
       onOrderNow(product);
     }
@@ -64,18 +74,22 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-product-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md transition-opacity duration-300 animate-in fade-in"
-      onClick={onClose}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md cursor-pointer ${
+        isClosing ? "modal-backdrop-exit" : "modal-backdrop-enter"
+      }`}
+      onClick={handleDismiss}
     >
       {/* Modal Container */}
       <div
-        className="relative flex flex-col w-full max-w-xl max-h-[92vh] overflow-hidden rounded-3xl bg-stone-900/95 border border-white/15 shadow-2xl backdrop-blur-xl animate-in zoom-in-95 duration-200"
+        className={`relative flex flex-col w-full max-w-xl max-h-[92vh] overflow-hidden rounded-3xl bg-stone-900/95 border border-white/15 shadow-2xl backdrop-blur-xl cursor-default ${
+          isClosing ? "modal-content-exit" : "modal-content-enter"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Floating Close Button */}
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleDismiss}
           aria-label={t("closeFullPicture")}
           className="absolute top-3.5 right-3.5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white/90 border border-white/20 backdrop-blur-md transition-all hover:bg-black/80 hover:text-white hover:scale-105 active:scale-95 cursor-pointer shadow-md"
         >

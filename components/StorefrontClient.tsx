@@ -10,6 +10,7 @@ import { CheckoutDrawer } from "@/components/CheckoutDrawer";
 import { ProductImageModal } from "@/components/ProductImageModal";
 import { StorePolicyModal } from "@/components/StorePolicyModal";
 import { StorePausedAnnouncementModal } from "@/components/StorePausedAnnouncementModal";
+import { SlidingPillTabs, SlidingPillItem } from "@/components/SlidingPillTabs";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTranslation } from "@/i18n/localeStore";
 import { FavouritesProvider, useFavourites } from "@/components/FavouritesProvider";
@@ -221,78 +222,26 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
     };
   }, []);
 
-  // Category Chips Sliding Pill & Auto-center
-  const chipsContainerRef = useRef<HTMLDivElement>(null);
-  const pillRef = useRef<HTMLDivElement>(null);
+  const categories = [
+    "All",
+    ...Array.from(
+      new Set(
+        store.products
+          .map((p) => p.category)
+          .filter((c): c is string => Boolean(c))
+      )
+    ),
+  ];
 
-  const movePill = useCallback((smoothScroll: boolean = false) => {
-    if (!chipsContainerRef.current || !pillRef.current) return;
-    const activeChip = chipsContainerRef.current.querySelector<HTMLElement>(
-      ".category-chip.is-active"
-    );
-    if (!activeChip) return;
-
-    const pill = pillRef.current;
-    pill.style.transform = `translateX(${activeChip.offsetLeft}px)`;
-    pill.style.width = `${activeChip.offsetWidth}px`;
-    pill.style.top = `${activeChip.offsetTop}px`;
-    pill.style.height = `${activeChip.offsetHeight}px`;
-    pill.style.opacity = "1";
-
-    if (smoothScroll) {
-      const prefersReducedMotion =
-        typeof window !== "undefined" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-      activeChip.scrollIntoView({
-        inline: "center",
-        block: "nearest",
-        behavior: prefersReducedMotion ? "auto" : "smooth",
-      });
-    }
-  }, []);
-
-  const handleSelectCategory = (cat: string, e: React.MouseEvent<HTMLButtonElement>) => {
-    setSelectedCategory(cat);
-    const chip = e.currentTarget;
-    if (pillRef.current) {
-      pillRef.current.style.transform = `translateX(${chip.offsetLeft}px)`;
-      pillRef.current.style.width = `${chip.offsetWidth}px`;
-      pillRef.current.style.top = `${chip.offsetTop}px`;
-      pillRef.current.style.height = `${chip.offsetHeight}px`;
-      pillRef.current.style.opacity = "1";
-    }
-    const prefersReducedMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    chip.scrollIntoView({
-      inline: "center",
-      block: "nearest",
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-    });
-  };
-
-  useEffect(() => {
-    // Initial position after render
-    const timer = setTimeout(() => {
-      movePill(false);
-    }, 20);
-
-    const handleResize = () => {
-      movePill(false);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [movePill]);
-
-  // Keep pill positioned if category changes externally (e.g. Reset filters)
-  useEffect(() => {
-    movePill(true);
-  }, [selectedCategory, movePill]);
+  // Category Items for SlidingPillTabs
+  const categoryItems = useMemo(
+    (): SlidingPillItem[] =>
+      categories.map((cat) => ({
+        id: cat,
+        label: cat === "All" ? t("allCategories") : getCategory(cat),
+      })),
+    [categories, t, getCategory]
+  );
 
   const scrollToTop = () => {
     window.scrollTo({
@@ -315,17 +264,6 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isSortOpen]);
-
-  const categories = [
-    "All",
-    ...Array.from(
-      new Set(
-        store.products
-          .map((p) => p.category)
-          .filter((c): c is string => Boolean(c))
-      )
-    ),
-  ];
 
   // Filter products by selected category, instant search query, and sort order
   const filteredProducts = useMemo(() => {
@@ -678,40 +616,13 @@ export const StorefrontClient: React.FC<StorefrontClientProps> = ({
 
         {/* Category Filter Pills */}
         <section className="px-4 py-2 w-full overflow-hidden">
-          <div
-            ref={chipsContainerRef}
-            className="chips-row no-scrollbar relative flex w-full items-center gap-1.5 overflow-x-auto overflow-y-hidden whitespace-nowrap touch-pan-x overscroll-x-contain pb-1 select-none"
-            style={{ touchAction: "pan-x" }}
-          >
-            {/* Sliding Pill */}
-            <div
-              ref={pillRef}
-              className="sliding-category-pill"
-              style={{
-                backgroundColor: store.primaryColor,
-                opacity: 0,
-              }}
-            />
-
-            {categories.map((cat) => {
-              const isActive = selectedCategory === cat;
-              return (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={(e) => handleSelectCategory(cat, e)}
-                  className={`category-chip shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap cursor-pointer touch-pan-x select-none ${
-                    isActive
-                      ? "is-active font-bold shadow-2xs"
-                      : "bg-stone-100 text-stone-600 hover:bg-stone-200/80"
-                  }`}
-                  style={{ touchAction: "pan-x" }}
-                >
-                  {cat === "All" ? t("allCategories") : getCategory(cat)}
-                </button>
-              );
-            })}
-          </div>
+          <SlidingPillTabs
+            items={categoryItems}
+            activeId={selectedCategory}
+            onChange={(cat) => setSelectedCategory(cat)}
+            activeColor={store.primaryColor}
+            size="md"
+          />
         </section>
 
         {/* Catalog Grid */}

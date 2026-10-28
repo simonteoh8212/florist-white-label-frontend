@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import Image from "next/image";
 import { StoreConfig } from "@/config/stores";
 import { StoreEmergencyStatus } from "@/lib/storeStatus";
@@ -163,10 +163,12 @@ export function StorePausedAnnouncementModal({
 
   // Modal display state (session-aware)
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   useEffect(() => {
     if (!isNotOperatingToday) {
       setIsOpen(false);
+      setIsClosing(false);
       return;
     }
 
@@ -176,25 +178,52 @@ export function StorePausedAnnouncementModal({
       const dismissed = sessionStorage.getItem(sessionKey);
       if (!dismissed) {
         setIsOpen(true);
+        setIsClosing(false);
       }
     } catch {
       setIsOpen(true);
+      setIsClosing(false);
     }
   }, [isNotOperatingToday, store.slug, todayStr]);
+
+  const handleDismiss = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsOpen(false);
+      setIsClosing(false);
+      try {
+        const sessionKey = `florist_pause_notice_${store.slug}_${todayStr}`;
+        sessionStorage.setItem(sessionKey, "true");
+      } catch {
+        // ignore
+      }
+    }, 260);
+  }, [isClosing, store.slug, todayStr]);
+
+  // Close on Escape key press and lock background scroll
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleDismiss();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen, handleDismiss]);
 
   if (!isOpen || !isNotOperatingToday) {
     return null;
   }
-
-  const handleDismiss = () => {
-    setIsOpen(false);
-    try {
-      const sessionKey = `florist_pause_notice_${store.slug}_${todayStr}`;
-      sessionStorage.setItem(sessionKey, "true");
-    } catch {
-      // ignore
-    }
-  };
 
   const handlePreOrderClick = () => {
     handleDismiss();
@@ -244,8 +273,21 @@ export function StorePausedAnnouncementModal({
     : nextWorkingDay.labelEn;
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-950/65 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
-      <div className="bg-white rounded-3xl max-w-md w-full border border-stone-200/90 shadow-2xl overflow-hidden relative animate-scale-up">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Store Announcement"
+      onClick={handleDismiss}
+      className={`fixed inset-0 z-50 bg-stone-950/65 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto cursor-pointer ${
+        isClosing ? "modal-backdrop-exit" : "modal-backdrop-enter"
+      }`}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`bg-white rounded-3xl max-w-md w-full border border-stone-200/90 shadow-2xl overflow-hidden relative cursor-default ${
+          isClosing ? "modal-content-exit" : "modal-content-enter"
+        }`}
+      >
         {/* Top Accent Strip */}
         <div
           className="h-2 w-full"
