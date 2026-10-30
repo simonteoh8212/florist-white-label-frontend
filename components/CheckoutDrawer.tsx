@@ -1175,10 +1175,12 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                     </div>
                     <div className="relative">
                       <select
+                        id="checkout-delivery-zone"
+                        aria-label={t("deliveryArea")}
                         value={selectedDeliveryZoneId || ""}
                         onChange={(e) => setSelectedDeliveryZoneId(e.target.value)}
                         required
-                        className="block w-full max-w-full appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all cursor-pointer font-medium"
+                        className="block w-full max-w-full appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all cursor-pointer font-medium"
                       >
                         <option value="" disabled>
                           {t("selectDeliveryArea")}
@@ -1368,6 +1370,8 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                   )}
                   <div className="relative w-full min-w-0">
                     <input
+                      id="checkout-delivery-date"
+                      aria-label={t("fulfillmentDate")}
                       type="date"
                       min={minSelectableDate}
                       value={selectedDate}
@@ -1393,7 +1397,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                         setValidationError(null);
                       }}
                       required
-                      className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                      className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -1444,13 +1448,15 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                     <div className="space-y-2">
                       <div className="relative w-full min-w-0">
                         <input
+                          id="checkout-delivery-time"
+                          aria-label={t("exactDeliveryTime")}
                           type="time"
                           min={minTimeForExactInput}
                           max={operatingEnd}
                           value={exactTimeInput}
                           onChange={(e) => handleExactTimeChange(e.target.value)}
                           required
-                          className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                          className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                         />
                       </div>
 
@@ -1583,16 +1589,18 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                 <div className="relative">
                   <User className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
                   <input
+                    id="checkout-recipient-name"
                     type="text"
                     name="name"
                     autoComplete="name"
+                    aria-label={t("recipientNamePlaceholder")}
                     placeholder={t("recipientNamePlaceholder")}
                     value={customerDetails.name}
                     onChange={(e) =>
                       setCustomerDetails({ name: e.target.value })
                     }
                     required
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                   />
                 </div>
 
@@ -1600,16 +1608,18 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                 <div className="relative">
                   <Phone className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
                   <input
+                    id="checkout-recipient-phone"
                     type="tel"
                     name="tel"
                     autoComplete="tel"
+                    aria-label={t("phonePlaceholder")}
                     placeholder={t("phonePlaceholder")}
                     value={customerDetails.phone}
                     onChange={(e) =>
                       setCustomerDetails({ phone: e.target.value })
                     }
                     required
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
                   />
                 </div>
 
@@ -1618,8 +1628,10 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                   <div className="relative">
                     <MapPin className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
                     <textarea
+                      id="checkout-delivery-address"
                       name="street-address"
                       autoComplete="street-address"
+                      aria-label={t("addressPlaceholder")}
                       placeholder={t("addressPlaceholder")}
                       rows={2}
                       value={customerDetails.deliveryAddress}
@@ -1627,7 +1639,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                         setCustomerDetails({ deliveryAddress: e.target.value })
                       }
                       required
-                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
+                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
                     />
                   </div>
                 )}
@@ -1637,13 +1649,15 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                   <div className="relative">
                     <Heart className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
                     <textarea
+                      id="checkout-card-message"
+                      aria-label={t("cardMessagePlaceholder")}
                       placeholder={t("cardMessagePlaceholder")}
                       rows={2}
                       value={customerDetails.cardMessage}
                       onChange={(e) =>
                         setCustomerDetails({ cardMessage: e.target.value })
                       }
-                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-8 pl-9 text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
+                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-8 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
                     />
                     {customerDetails.cardMessage && (
                       <button
@@ -1701,7 +1715,11 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
 
               {/* Inline Validation Alert */}
               {validationError && (
-                <div className="rounded-xl bg-red-50 p-3 text-xs font-medium text-red-600 border border-red-200/80 animate-in fade-in duration-200">
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="rounded-xl bg-red-50 p-3 text-xs font-medium text-red-600 border border-red-200/80 animate-in fade-in duration-200"
+                >
                   {validationError}
                 </div>
               )}
@@ -1886,14 +1904,20 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
             </div>
           </form>
         ) : checkoutStep === 2 ? (
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4">
+          <div
+            key="checkout-step-2"
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4"
+          >
             <TngPaymentView
               store={store}
               pricingDisplayMode={liveStatus?.holidayPricingDisplay}
             />
           </div>
         ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-0">
+          <div
+            key="checkout-step-3"
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-0"
+          >
             <OrderSuccess
               key={selectedProduct ? `success-${selectedProduct.id}` : "success"}
               message={whatsappMessage}

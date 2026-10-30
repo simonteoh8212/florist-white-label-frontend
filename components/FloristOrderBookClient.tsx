@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -50,12 +50,23 @@ import {
   Loader2,
   Info,
   Bell,
+  MoreHorizontal,
   LayoutList,
   LayoutGrid,
 } from "lucide-react";
 import { StoreEmergencyStatus } from "@/lib/storeStatus";
 import { SlidingPillTabs, SlidingPillItem } from "@/components/SlidingPillTabs";
 import { FloristOrderCard } from "@/components/FloristOrderCard";
+import toast from "react-hot-toast";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerClose,
+} from "@/components/ui/drawer";
 
 interface FloristOrderBookClientProps {
   store: StoreConfig;
@@ -90,7 +101,6 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "upcoming" | "all">("today");
   const [searchQuery, setSearchQuery] = useState("");
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [showFinancialSummary, setShowFinancialSummary] = useState(false);
@@ -113,6 +123,65 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   const [isEmergencyPanelOpen, setIsEmergencyPanelOpen] = useState(false);
   const [emergencyNoticeInput, setEmergencyNoticeInput] = useState("");
   const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
+
+  // Top Screen Redesign State
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showPauseConfirm, setShowPauseConfirm] = useState(false);
+  const [isCapacitySheetOpen, setIsCapacitySheetOpen] = useState(false);
+  const [dailyLimit, setDailyLimit] = useState<number>(() => store.holidayPeakConfig?.rules?.[0]?.maxDailyOrders || 40);
+  const [limitPulse, setLimitPulse] = useState(0);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Anti-Spam Debounce, AbortController & Zero-Op refs for Emergency Switches
+  const committedStatusRef = useRef<StoreEmergencyStatus | null>(null);
+  const pendingEmergencyUpdatesRef = useRef<Partial<{
+    isTodayPaused: boolean;
+    isTomorrowBlocked: boolean;
+    emergencyNotice: string;
+    holidayPricingDisplay: "separate_surcharge" | "inclusive";
+  }>>({});
+  const emergencyDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const emergencyAbortRef = useRef<AbortController | null>(null);
+  const stockAbortRef = useRef<AbortController | null>(null);
+
+  // Clean up debounce timer and any in-flight requests on unmount
+  useEffect(() => {
+    return () => {
+      if (emergencyDebounceTimerRef.current) {
+        clearTimeout(emergencyDebounceTimerRef.current);
+      }
+      if (emergencyAbortRef.current) {
+        emergencyAbortRef.current.abort();
+      }
+      if (stockAbortRef.current) {
+        stockAbortRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Dismiss dropdown menu, capacity sheet, and pause confirm on outside click & Escape key
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsMenuOpen(false);
+        setIsCapacitySheetOpen(false);
+        setShowPauseConfirm(false);
+      }
+    };
+    if (isMenuOpen || isCapacitySheetOpen || showPauseConfirm) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleEsc);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [isMenuOpen, isCapacitySheetOpen, showPauseConfirm]);
 
   // Close info tooltip on outside click
   useEffect(() => {
@@ -194,10 +263,18 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   }, [store.slug]);
 
   const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage((curr) => (curr === msg ? null : curr));
-    }, 3000);
+    const isError =
+      msg.toLowerCase().includes("fail") ||
+      msg.toLowerCase().includes("error") ||
+      msg.toLowerCase().includes("cannot") ||
+      msg.toLowerCase().includes("revert") ||
+      msg.toLowerCase().includes("invalid") ||
+      msg.toLowerCase().includes("past");
+    if (isError) {
+      toast.error(msg);
+    } else {
+      toast.success(msg);
+    }
   }, []);
 
   const formatCountdown = (secs: number) => {
@@ -374,6 +451,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
       const data = await res.json();
       if (res.ok && data.success && data.status) {
         setStoreStatus(data.status);
+        committedStatusRef.current = data.status;
         setEmergencyNoticeInput(data.status.emergencyNotice || "");
       }
     } catch (err) {
@@ -381,53 +459,152 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     }
   }, [store.slug]);
 
-  // Handle emergency toggle & festive pricing strategy
-  const handleToggleEmergency = async (
-    updates: Partial<{
-      isTodayPaused: boolean;
-      isTomorrowBlocked: boolean;
-      emergencyNotice: string;
-      holidayPricingDisplay: "separate_surcharge" | "inclusive";
-    }>
-  ) => {
-    setIsUpdatingStatus(true);
-    try {
-      const res = await fetch("/api/store/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storeSlug: store.slug,
-          pin,
-          ...updates,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setStoreStatus(data.status);
-        if (updates.emergencyNotice !== undefined) {
-          setEmergencyNoticeInput(data.status.emergencyNotice || "");
+  // Handle emergency toggle & festive pricing strategy (Debounced + Optimistic UI + AbortController + Zero-Op)
+  const handleToggleEmergency = useCallback(
+    async (
+      updates: Partial<{
+        isTodayPaused: boolean;
+        isTomorrowBlocked: boolean;
+        emergencyNotice: string;
+        holidayPricingDisplay: "separate_surcharge" | "inclusive";
+      }>,
+      options?: { immediate?: boolean }
+    ) => {
+      // 1. Optimistically update local state immediately so switches animate instantly (0ms lag)
+      setStoreStatus((prev) => {
+        if (!prev) {
+          return {
+            storeSlug: store.slug,
+            isTodayPaused: updates.isTodayPaused ?? false,
+            isTomorrowBlocked: updates.isTomorrowBlocked ?? false,
+            emergencyNotice: updates.emergencyNotice ?? "",
+            updatedAt: new Date().toISOString(),
+            ...updates,
+          } as StoreEmergencyStatus;
         }
-        showToast(
-          updates.holidayPricingDisplay
-            ? `Peak pricing strategy switched to: ${
-                updates.holidayPricingDisplay === "inclusive"
-                  ? "Directly Charge in Product Price"
-                  : "Separate Line Item Surcharge"
-              }`
-            : "Emergency & capacity settings updated!"
-        );
-      } else {
-        showToast(data.error || "Failed to update emergency settings");
-      }
-    } catch {
-      showToast("Network error updating status");
-    } finally {
-      setIsUpdatingStatus(false);
-    }
-  };
+        return {
+          ...prev,
+          ...updates,
+        };
+      });
 
-  // 1-Tap toggle individual product stock status
+      // 2. Accumulate updates into pending updates ref
+      pendingEmergencyUpdatesRef.current = {
+        ...pendingEmergencyUpdatesRef.current,
+        ...updates,
+      };
+
+      // 3. Clear any existing debounce timer
+      if (emergencyDebounceTimerRef.current) {
+        clearTimeout(emergencyDebounceTimerRef.current);
+        emergencyDebounceTimerRef.current = null;
+      }
+
+      const executeFlush = async () => {
+        const payload = { ...pendingEmergencyUpdatesRef.current };
+        pendingEmergencyUpdatesRef.current = {};
+
+        if (Object.keys(payload).length === 0) return;
+
+        // Zero-Op Detection: if user spammed ON -> OFF -> ON, check if final state matches server
+        const committed = committedStatusRef.current;
+        if (committed) {
+          let hasRealChange = false;
+          for (const [key, val] of Object.entries(payload)) {
+            if (committed[key as keyof StoreEmergencyStatus] !== val) {
+              hasRealChange = true;
+              break;
+            }
+          }
+          if (!hasRealChange) {
+            // Ending state matches current server state: 0 network requests sent!
+            return;
+          }
+        }
+
+        // Abort previous in-flight request to eliminate race conditions
+        if (emergencyAbortRef.current) {
+          emergencyAbortRef.current.abort();
+        }
+        const controller = new AbortController();
+        emergencyAbortRef.current = controller;
+
+        setIsUpdatingStatus(true);
+        try {
+          const res = await fetch("/api/store/status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              storeSlug: store.slug,
+              pin,
+              ...payload,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            committedStatusRef.current = data.status;
+            setStoreStatus(data.status);
+            if (payload.emergencyNotice !== undefined) {
+              setEmergencyNoticeInput(data.status.emergencyNotice || "");
+            }
+            showToast(
+              payload.holidayPricingDisplay
+                ? `Peak pricing strategy switched to: ${
+                    payload.holidayPricingDisplay === "inclusive"
+                      ? "Directly Charge in Product Price"
+                      : "Separate Line Item Surcharge"
+                  }`
+                : payload.isTodayPaused !== undefined
+                ? payload.isTodayPaused
+                  ? "Same-day orders paused"
+                  : "Same-day orders are open"
+                : payload.isTomorrowBlocked !== undefined
+                ? payload.isTomorrowBlocked
+                  ? "Tomorrow orders blocked"
+                  : "Tomorrow orders open"
+                : "Settings updated"
+            );
+          } else {
+            // Revert optimistically applied update to last confirmed server state
+            if (committedStatusRef.current) {
+              setStoreStatus(committedStatusRef.current);
+            }
+            showToast(data.error || "Failed to update status. Reverted.");
+          }
+        } catch (err: unknown) {
+          // If aborted by a newer request, quietly exit without rollback
+          if (err instanceof Error && err.name === "AbortError") {
+            return;
+          }
+          if (committedStatusRef.current) {
+            setStoreStatus(committedStatusRef.current);
+          }
+          showToast("Network error. Changes reverted.");
+        } finally {
+          if (emergencyAbortRef.current === controller) {
+            emergencyAbortRef.current = null;
+            setIsUpdatingStatus(false);
+          }
+        }
+      };
+
+      if (options?.immediate) {
+        // Immediate execution for explicit "Save" button
+        await executeFlush();
+      } else {
+        // 400ms trailing-edge debounce for rapid switch clicks
+        emergencyDebounceTimerRef.current = setTimeout(() => {
+          executeFlush();
+        }, 400);
+      }
+    },
+    [pin, store.slug, showToast]
+  );
+
+  // 1-Tap toggle individual product stock status (Optimistic UI + AbortController)
   const handleToggleProductStock = async (productId: string) => {
+    const previousStatus = storeStatus;
     const currentOutOfStock = storeStatus?.outOfStockProductIds || [];
     const isCurrentlyOut = currentOutOfStock.includes(productId);
     const newOutOfStock = isCurrentlyOut
@@ -437,12 +614,22 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     const targetProduct = store.products.find((p) => p.id === productId);
     const productName = targetProduct ? targetProduct.name : "Product";
 
+    // Optimistically update stock array immediately
+    setStoreStatus((prev) => (prev ? { ...prev, outOfStockProductIds: newOutOfStock } : prev));
     setUpdatingStockProductId(productId);
     setIsUpdatingStatus(true);
+
+    if (stockAbortRef.current) {
+      stockAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    stockAbortRef.current = controller;
+
     try {
       const res = await fetch("/api/store/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           storeSlug: store.slug,
           pin,
@@ -451,6 +638,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        committedStatusRef.current = data.status;
         setStoreStatus(data.status);
         showToast(
           isCurrentlyOut
@@ -458,13 +646,21 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             : `"${productName}" marked as SOLD OUT`
         );
       } else {
-        showToast(data.error || "Failed to update stock status");
+        setStoreStatus(previousStatus);
+        showToast(data.error || "Failed to update stock status. Reverted.");
       }
-    } catch {
-      showToast("Network error updating stock status");
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
+      setStoreStatus(previousStatus);
+      showToast("Network error updating stock status. Reverted.");
     } finally {
-      setIsUpdatingStatus(false);
-      setUpdatingStockProductId(null);
+      if (stockAbortRef.current === controller) {
+        stockAbortRef.current = null;
+        setIsUpdatingStatus(false);
+        setUpdatingStockProductId(null);
+      }
     }
   };
 
@@ -901,8 +1097,8 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           <span
             className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold transition-colors ${
               isActive
-                ? "bg-stone-900 text-white"
-                : "bg-stone-300 text-stone-700"
+                ? "bg-[var(--brand,#be185d)] text-white"
+                : "bg-stone-200 text-stone-600"
             }`}
           >
             {todayOrders.length}
@@ -916,8 +1112,8 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           <span
             className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold transition-colors ${
               isActive
-                ? "bg-stone-900 text-white"
-                : "bg-stone-300 text-stone-700"
+                ? "bg-[var(--brand,#be185d)] text-white"
+                : "bg-stone-200 text-stone-600"
             }`}
           >
             {tomorrowOrders.length}
@@ -931,8 +1127,8 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           <span
             className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold transition-colors ${
               isActive
-                ? "bg-stone-900 text-white"
-                : "bg-stone-300 text-stone-700"
+                ? "bg-[var(--brand,#be185d)] text-white"
+                : "bg-stone-200 text-stone-600"
             }`}
           >
             {upcomingOrders.length}
@@ -946,8 +1142,8 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           <span
             className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold transition-colors ${
               isActive
-                ? "bg-stone-900 text-white"
-                : "bg-stone-300 text-stone-700"
+                ? "bg-[var(--brand,#be185d)] text-white"
+                : "bg-stone-200 text-stone-600"
             }`}
           >
             {orders.length}
@@ -963,6 +1159,69 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
       .filter((o) => o.fulfillmentStatus !== "cancelled")
       .reduce((sum, o) => sum + o.totalAmount, 0);
   }, [todayOrders]);
+
+  // Count-up animation for todayRevenue (0.7s ease-out)
+  const [animatedRevenue, setAnimatedRevenue] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      setAnimatedRevenue(todayRevenue);
+      return;
+    }
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) {
+      setAnimatedRevenue(todayRevenue);
+      return;
+    }
+
+    const startValue = 0;
+    const targetValue = todayRevenue;
+    const duration = 700; // 0.7s
+    const startTime = performance.now();
+
+    let animationFrameId: number;
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      setAnimatedRevenue(Math.round(startValue + (targetValue - startValue) * easeOut));
+
+      if (progress < 1) {
+        animationFrameId = requestAnimationFrame(animate);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [todayRevenue]);
+
+  const todayDateFormatted = useMemo(() => {
+    const now = new Date();
+    const weekdayMonthDay = new Intl.DateTimeFormat("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "Asia/Kuala_Lumpur",
+    }).format(now);
+    return `Today · ${weekdayMonthDay}`;
+  }, []);
+
+  const isTodayPaused = Boolean(storeStatus?.isTodayPaused);
+  const isTomorrowBlocked = Boolean(storeStatus?.isTomorrowBlocked);
+
+  const handleSameDaySwitchClick = () => {
+    if (isTodayPaused) {
+      handleToggleEmergency({ isTodayPaused: false });
+    } else {
+      setShowPauseConfirm(true);
+    }
+  };
+
+  const confirmPauseSameDay = () => {
+    setShowPauseConfirm(false);
+    handleToggleEmergency({ isTodayPaused: true });
+  };
 
   const monthRevenue = useMemo(() => {
     const currentMonth = todayStr.slice(0, 7); // "YYYY-MM"
@@ -1388,891 +1647,393 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
   // VIEW 2: DISPATCH DESK & ORDER BOOK SCREEN
   // ==========================================
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-stone-900 pb-16">
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-2xs">
-        <div className="max-w-2xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-9 w-9 relative rounded-xl bg-stone-100 border border-stone-200/80 overflow-hidden flex items-center justify-center shrink-0">
+    <div className="min-h-screen bg-[#faf9f6] text-stone-900 pb-16">
+      {/* 1. HEADER (One row, 44px controls) */}
+      <header className="sticky top-0 z-40 bg-white border-b border-[#e7e5e4] shadow-2xs">
+        <div className="max-w-2xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
+          {/* Left: 44px round logo + shop name + Staff order book */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="lg">
               <Image
                 src={store.logo}
                 alt={store.name}
-                width={32}
-                height={32}
+                width={36}
+                height={36}
                 className="object-contain"
               />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-sm font-bold text-stone-900 leading-tight truncate">
-                  {store.name}
-                </h1>
-              </div>
-              <p className="text-[11px] text-stone-500 truncate">
-                Staff Order Book &middot; PIN: {pin}
-              </p>
+            <div className="hn">
+              <b>{store.name}</b>
+              <small>Staff order book</small>
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2 shrink-0">
-            {/* Utility action buttons (Refresh, Shop, Lock) */}
-            <div className="flex items-center gap-1.5 justify-end w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={handleBellClick}
-                className="relative p-1.5 sm:p-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 active:scale-95 border border-stone-200/70 transition-all cursor-pointer"
-                title={
-                  newOrdersCount > 0
-                    ? `${newOrdersCount} New pending ${newOrdersCount === 1 ? "order" : "orders"}. Tap to jump.`
-                    : "No pending new orders"
-                }
-                aria-label="View New Orders"
-              >
-                <Bell
-                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-colors ${
-                    newOrdersCount > 0
-                      ? "text-rose-600 fill-rose-500"
-                      : "text-stone-500"
-                  }`}
-                />
-                {newOrdersCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-600 text-[9px] font-black text-white shadow-xs animate-pulse">
-                    {newOrdersCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fetchOrders(pin)}
-                disabled={isLoadingOrders}
-                className="p-1.5 sm:p-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 active:scale-95 border border-stone-200/70 transition-all cursor-pointer"
-                title="Refresh Orders"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${isLoadingOrders ? "animate-spin text-stone-900" : ""}`} />
-              </button>
-
-              <Link
-                href={storefrontHref}
-                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 active:scale-95 transition-all inline-flex items-center gap-1"
-                title="Go to customer shop"
-              >
-                <ExternalLink className="h-3 w-3" />
-                <span>Shop</span>
-              </Link>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="p-1.5 sm:p-2 rounded-xl text-stone-500 hover:text-rose-600 hover:bg-rose-50 active:scale-95 border border-stone-200/70 transition-all cursor-pointer"
-                title="Lock / Logout"
-              >
-                <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </button>
-            </div>
-
-            {/* Quick Order Button: Placed underneath Refresh/Shop/Lock on mobile, or inline on desktop */}
+          {/* Right: Bell with count badge & ⋯ dropdown menu */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Bell button */}
             <button
               type="button"
-              onClick={openQuickOrder}
-              className="w-full self-stretch sm:self-auto sm:w-auto px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-stone-900 hover:bg-black active:scale-[0.98] transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer order-last sm:order-first"
-              title="Record Walk-in takeaway or Phone call order"
+              onClick={handleBellClick}
+              className="ib"
+              aria-label="Notifications"
+              title={
+                newOrdersCount > 0
+                  ? `${newOrdersCount} New pending ${newOrdersCount === 1 ? "order" : "orders"}. Tap to jump.`
+                  : "No pending new orders"
+              }
             >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Order</span>
+              <Bell className="h-5 w-5" />
+              <span className={`bg ${newOrdersCount > 0 ? "" : "gone"}`}>
+                {newOrdersCount}
+              </span>
             </button>
+
+            {/* ⋯ More button with anchored dropdown */}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen((v) => !v)}
+                className="ib"
+                aria-expanded={isMenuOpen}
+                aria-haspopup="menu"
+                aria-label="More options"
+              >
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
+
+              {isMenuOpen && (
+                <div className="mn" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      fetchOrders(pin);
+                    }}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isLoadingOrders ? "animate-spin" : ""}`} />
+                    <span>Refresh orders</span>
+                  </button>
+
+                  <Link
+                    href={storefrontHref}
+                    role="menuitem"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    <span>View shop</span>
+                  </Link>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="text-red-600 hover:bg-red-50"
+                  >
+                    <Lock className="h-4 w-4 text-red-600" />
+                    <span>Lock app</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-2xl mx-auto px-4 pt-4 space-y-4">
-        {/* ============================================================ */}
-        {/* EMERGENCY & CAPACITY CONTROLS (Option A Full Suite)          */}
-        {/* ============================================================ */}
-        <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden">
-          {/* Card Header & Live Status Indicators */}
-          <div
-            onClick={() => setIsEmergencyPanelOpen((prev) => !prev)}
-            className="px-4 py-3 bg-stone-50/90 hover:bg-stone-100/80 transition-colors flex items-center justify-between cursor-pointer border-b border-stone-200/60"
-          >
-            <div className="flex items-center gap-2">
-              <div
-                className={`p-1.5 rounded-lg border ${
-                  storeStatus?.isTodayPaused || storeStatus?.isTomorrowBlocked
-                    ? "bg-rose-100 border-rose-300 text-rose-700 animate-pulse"
-                    : "bg-emerald-100 border-emerald-300 text-emerald-700"
-                }`}
-              >
-                <ShieldAlert className="h-4 w-4" />
-              </div>
+      <main className="max-w-2xl mx-auto px-4 pt-4 pb-28 space-y-4">
+        {/* 2. AVAILABILITY BAR */}
+        <section className={`av ${isTodayPaused ? "off" : ""}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="avl">
+              <i />
               <div>
-                <h3 className="text-xs font-bold text-stone-900 leading-tight">
-                  Emergency &amp; Capacity Controls
-                </h3>
-                <p className="text-[10px] text-stone-500">
-                  Instant kill switch for same-day delivery, tomorrow block &amp; notice
-                </p>
+                <b className="text-sm font-bold block text-stone-900 leading-tight">
+                  {isTodayPaused ? "Same-day orders paused" : "Taking same-day orders"}
+                </b>
+                <span className="text-xs text-stone-500 block">
+                  {isTodayPaused
+                    ? "Customers are asked to choose tomorrow"
+                    : "Customers can book delivery today"}
+                </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {/* Today Status Pill */}
-              {storeStatus?.isTodayPaused ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                  <Pause className="h-2.5 w-2.5" />
-                  <span>Today Paused</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  <Check className="h-2.5 w-2.5" />
-                  <span>Today Open</span>
-                </span>
-              )}
-
-              {/* Tomorrow Status Pill */}
-              {storeStatus?.isTomorrowBlocked && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                  <Ban className="h-2.5 w-2.5" />
-                  <span>Tomorrow Blocked</span>
-                </span>
-              )}
-
-              {/* Banner Active Pill */}
-              {storeStatus?.emergencyNotice && (
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
-                  <span>Banner On</span>
-                </span>
-              )}
-
-              <div className="p-1 rounded-lg text-stone-400">
-                {isEmergencyPanelOpen ? (
-                  <ChevronUp className="h-4 w-4 text-stone-600" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-stone-600" />
-                )}
-              </div>
-            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!isTodayPaused}
+              aria-label="Toggle same-day orders"
+              onClick={handleSameDaySwitchClick}
+              className={`sw ${!isTodayPaused ? "on" : ""}`}
+            >
+              <i />
+            </button>
           </div>
 
-          {/* Expandable Controls Panel */}
-          {isEmergencyPanelOpen && (
-            <div className="p-4 space-y-4 text-xs bg-white">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Control 1: Today Same-Day Orders */}
-                <div
-                  className={`p-3.5 rounded-2xl border transition-all ${
-                    storeStatus?.isTodayPaused
-                      ? "bg-rose-50/80 border-rose-300"
-                      : "bg-stone-50/80 border-stone-200"
-                  }`}
+          {/* Confirm row if turning off */}
+          {showPauseConfirm && (
+            <div className="cf">
+              <span>Pause same-day orders?</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="cx"
+                  onClick={() => setShowPauseConfirm(false)}
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-xs text-stone-900">
-                        1. Same-Day Deliveries (Today)
-                      </span>
-                      {/* Info Icon with Hover & Click Tooltip */}
-                      <div className="relative inline-flex items-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveInfoTooltip(
-                              activeInfoTooltip === "today" ? null : "today"
-                            );
-                          }}
-                          className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 transition-colors cursor-pointer group"
-                          aria-label="Info about Same-Day Deliveries"
-                        >
-                          <Info className="h-3.5 w-3.5" />
-                        </button>
-
-                        {/* Tooltip on hover (desktop) or click (mobile/desktop) */}
-                        <div
-                          className={`absolute left-0 bottom-full mb-2 w-64 max-w-[85vw] p-2.5 bg-stone-900 text-white rounded-xl shadow-xl text-[11px] leading-relaxed z-40 transition-all pointer-events-none ${
-                            activeInfoTooltip === "today"
-                              ? "opacity-100 visible"
-                              : "opacity-0 invisible group-hover:opacity-100 group-hover:visible"
-                          }`}
-                        >
-                          <div className="font-bold text-white mb-0.5 flex items-center gap-1">
-                            <Info className="h-3 w-3 text-stone-400" />
-                            <span>Same-Day Orders Kill Switch</span>
-                          </div>
-                          <p className="text-stone-300 text-[11px] leading-normal">
-                            Instantly pauses same-day orders on your storefront when overwhelmed or running low on fresh blooms. Customers can only book for tomorrow onwards.
-                          </p>
-                          <div className="absolute left-3 -bottom-1 border-4 border-transparent border-t-stone-900" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        storeStatus?.isTodayPaused
-                          ? "bg-rose-100 text-rose-800 border-rose-300"
-                          : "bg-emerald-100 text-emerald-800 border-emerald-300"
-                      }`}
-                    >
-                      {storeStatus?.isTodayPaused ? "PAUSED" : "ACTIVE"}
-                    </span>
-                  </div>
-
-                  {/* Big Prominent Action Button */}
-                  <button
-                    type="button"
-                    disabled={isUpdatingStatus}
-                    onClick={() =>
-                      handleToggleEmergency({
-                        isTodayPaused: !storeStatus?.isTodayPaused,
-                      })
-                    }
-                    className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-2xs active:scale-[0.99] cursor-pointer ${
-                      storeStatus?.isTodayPaused
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                        : "bg-rose-600 hover:bg-rose-700 text-white"
-                    }`}
-                  >
-                    {storeStatus?.isTodayPaused ? (
-                      <>
-                        <Play className="h-4 w-4 shrink-0 fill-current" />
-                        <span>Resume Same-Day Deliveries</span>
-                      </>
-                    ) : (
-                      <>
-                        <Pause className="h-4 w-4 shrink-0 fill-current" />
-                        <span>Emergency Pause Today</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Control 2: Tomorrow's Deliveries */}
-                <div
-                  className={`p-3.5 rounded-2xl border transition-all ${
-                    storeStatus?.isTomorrowBlocked
-                      ? "bg-amber-50/80 border-amber-300"
-                      : "bg-stone-50/80 border-stone-200"
-                  }`}
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="pz"
+                  onClick={confirmPauseSameDay}
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-xs text-stone-900">
-                        2. Deliveries (Tomorrow)
-                      </span>
-                      {/* Info Icon with Hover & Click Tooltip */}
-                      <div className="relative inline-flex items-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveInfoTooltip(
-                              activeInfoTooltip === "tomorrow" ? null : "tomorrow"
-                            );
-                          }}
-                          className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 transition-colors cursor-pointer group"
-                          aria-label="Info about Tomorrow Deliveries"
-                        >
-                          <Info className="h-3.5 w-3.5" />
-                        </button>
-
-                        {/* Tooltip on hover (desktop) or click (mobile/desktop) */}
-                        <div
-                          className={`absolute left-0 sm:right-0 sm:left-auto bottom-full mb-2 w-64 max-w-[85vw] p-2.5 bg-stone-900 text-white rounded-xl shadow-xl text-[11px] leading-relaxed z-40 transition-all pointer-events-none ${
-                            activeInfoTooltip === "tomorrow"
-                              ? "opacity-100 visible"
-                              : "opacity-0 invisible group-hover:opacity-100 group-hover:visible"
-                          }`}
-                        >
-                          <div className="font-bold text-white mb-0.5 flex items-center gap-1">
-                            <Info className="h-3 w-3 text-stone-400" />
-                            <span>Block Tomorrow Orders</span>
-                          </div>
-                          <p className="text-stone-300 text-[11px] leading-normal">
-                            Blocks tomorrow from checkout so customers cannot book tomorrow's date. Useful for public holidays, supplier delays, or studio rest days.
-                          </p>
-                          <div className="absolute left-3 sm:left-auto sm:right-3 -bottom-1 border-4 border-transparent border-t-stone-900" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        storeStatus?.isTomorrowBlocked
-                          ? "bg-amber-100 text-amber-800 border-amber-300"
-                          : "bg-emerald-100 text-emerald-800 border-emerald-300"
-                      }`}
-                    >
-                      {storeStatus?.isTomorrowBlocked ? "BLOCKED" : "OPEN"}
-                    </span>
-                  </div>
-
-                  {/* Big Prominent Action Button */}
-                  <button
-                    type="button"
-                    disabled={isUpdatingStatus}
-                    onClick={() =>
-                      handleToggleEmergency({
-                        isTomorrowBlocked: !storeStatus?.isTomorrowBlocked,
-                      })
-                    }
-                    className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-2xs active:scale-[0.99] cursor-pointer ${
-                      storeStatus?.isTomorrowBlocked
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                        : "bg-amber-600 hover:bg-amber-700 text-white"
-                    }`}
-                  >
-                    {storeStatus?.isTomorrowBlocked ? (
-                      <>
-                        <Check className="h-4 w-4 shrink-0 stroke-[2.5]" />
-                        <span>Unblock &amp; Open Tomorrow</span>
-                      </>
-                    ) : (
-                      <>
-                        <Ban className="h-4 w-4 shrink-0" />
-                        <span>Block Tomorrow</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Control 3: Storefront Emergency Announcement Banner */}
-              <div className="pt-2 border-t border-stone-200/70">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600">
-                    3. Storefront Emergency Announcement Banner
-                  </label>
-                  {storeStatus?.emergencyNotice && (
-                    <button
-                      type="button"
-                      disabled={isUpdatingStatus}
-                      onClick={() => handleToggleEmergency({ emergencyNotice: "" })}
-                      className="text-[10px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer"
-                    >
-                      Clear Active Banner
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    placeholder="e.g. Due to high demand, same-day orders are paused today. WhatsApp us for urgent inquiries."
-                    value={emergencyNoticeInput}
-                    onChange={(e) => setEmergencyNoticeInput(e.target.value)}
-                    className="flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
-                  />
-                  <button
-                    type="button"
-                    disabled={isUpdatingStatus}
-                    onClick={() =>
-                      handleToggleEmergency({
-                        emergencyNotice: emergencyNoticeInput.trim(),
-                      })
-                    }
-                    className="py-2 px-4 rounded-xl bg-stone-900 hover:bg-black text-white font-bold text-xs shadow-2xs shrink-0 cursor-pointer"
-                  >
-                    {isUpdatingStatus ? "Saving..." : "Save Banner"}
-                  </button>
-                </div>
-
-                {/* Preset Suggestions */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[10px] text-stone-400 uppercase font-semibold">
-                    Quick Presets:
-                  </span>
-                  {[
-                    "Orders at maximum capacity today. Deliveries for tomorrow onwards are warmly welcomed!",
-                    "Fresh bloom shipment is delayed today. Re-opening for deliveries tomorrow morning.",
-                    "Store is closed today for urgent facility maintenance. Please WhatsApp us for inquiries.",
-                  ].map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setEmergencyNoticeInput(preset)}
-                      className="text-[10px] rounded-lg border border-stone-200 bg-stone-50 px-2 py-0.5 text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer text-left truncate max-w-xs"
-                      title={preset}
-                    >
-                      Preset {idx + 1}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Control 4: Active Peak Holiday Rules & Pricing Strategies */}
-              {store.holidayPeakConfig?.rules && store.holidayPeakConfig.rules.length > 0 && (
-                <div className="pt-2 border-t border-stone-200/70">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
-                      <Sparkles className="h-3 w-3 text-rose-600" />
-                      <span>4. Festive Peak Surcharge Pricing Strategy</span>
-                    </label>
-                    <span className="text-[10px] text-stone-400 font-medium">
-                      Live Customer Experience
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-stone-500 mb-2.5 leading-relaxed">
-                    Decide how festive holiday peak surcharges appear to your customers during checkout &amp; WhatsApp:
-                  </p>
-
-                  {/* 1-Tap Strategy Toggle Switcher */}
-                  {(() => {
-                    const activeStrategy =
-                      storeStatus?.holidayPricingDisplay ||
-                      store.holidayPeakConfig.rules[0]?.pricingDisplay ||
-                      "separate_surcharge";
-
-                    return (
-                      <div className="space-y-2 mb-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {/* Option 1: Separate Surcharge Line */}
-                          <button
-                            type="button"
-                            disabled={isUpdatingStatus}
-                            onClick={() =>
-                              handleToggleEmergency({
-                                holidayPricingDisplay: "separate_surcharge",
-                              })
-                            }
-                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative ${
-                              activeStrategy === "separate_surcharge"
-                                ? "bg-sky-50/90 border-sky-400 ring-2 ring-sky-200 shadow-2xs"
-                                : "bg-stone-50/70 border-stone-200 hover:bg-stone-100 hover:border-stone-300"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-bold text-xs text-stone-900 flex items-center gap-1.5">
-                                <span>Separate Surcharge Line</span>
-                              </span>
-                              {activeStrategy === "separate_surcharge" && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-sky-200 text-sky-900 flex items-center gap-1">
-                                  <Check className="h-2.5 w-2.5 stroke-[3]" />
-                                  ACTIVE
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-stone-600 leading-snug mb-2">
-                              Bouquet shows base price (e.g. {currency} 168.00). Surcharge (+{currency} 35.00) is itemized separately at checkout.
-                            </p>
-                            <div className="text-[10px] font-semibold text-sky-700 bg-sky-100/70 px-2 py-0.5 rounded-md inline-block">
-                              Best for: Transparency &amp; explaining flower market spikes
-                            </div>
-                          </button>
-
-                          {/* Option 2: Charge Directly in Product Price */}
-                          <button
-                            type="button"
-                            disabled={isUpdatingStatus}
-                            onClick={() =>
-                              handleToggleEmergency({
-                                holidayPricingDisplay: "inclusive",
-                              })
-                            }
-                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative ${
-                              activeStrategy === "inclusive"
-                                ? "bg-purple-50/90 border-purple-400 ring-2 ring-purple-200 shadow-2xs"
-                                : "bg-stone-50/70 border-stone-200 hover:bg-stone-100 hover:border-stone-300"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-bold text-xs text-stone-900 flex items-center gap-1.5">
-                                <span>Directly in Product Price</span>
-                              </span>
-                              {activeStrategy === "inclusive" && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-purple-200 text-purple-900 flex items-center gap-1">
-                                  <Check className="h-2.5 w-2.5 stroke-[3]" />
-                                  ACTIVE
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-stone-600 leading-snug mb-2">
-                              Surcharge rolled into price (e.g. {currency} 203.00) with [Holiday Seasonal Price] badge. Zero fee surprises.
-                            </p>
-                            <div className="text-[10px] font-semibold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-md inline-block">
-                              Best for: Zero checkout friction &amp; higher conversions
-                            </div>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Active Rules List */}
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] text-stone-400 uppercase font-semibold block">
-                      Scheduled Festive Windows:
-                    </span>
-                    {store.holidayPeakConfig.rules.map((rule) => {
-                      const activeStrategy =
-                        storeStatus?.holidayPricingDisplay ||
-                        rule.pricingDisplay ||
-                        "separate_surcharge";
-                      const isInclusive = activeStrategy === "inclusive";
-
-                      return (
-                        <div
-                          key={rule.id}
-                          className="flex items-center justify-between p-2 rounded-xl border border-stone-200 bg-stone-50/70 text-xs"
-                        >
-                          <div>
-                            <span className="font-bold text-stone-900 block text-[11px]">
-                              {rule.name}
-                            </span>
-                            <span className="text-[10px] text-stone-500">
-                              {rule.startDate} &ndash; {rule.endDate} &bull; Cap: {rule.maxDailyOrders || "Unlimited"}
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-bold text-rose-700 block text-[11px]">
-                              {rule.surchargeType === "percentage" ? `+${rule.surchargeAmount}%` : `+${currency} ${rule.surchargeAmount}`}
-                            </span>
-                            <span className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-bold ${isInclusive ? "bg-purple-100 text-purple-800 border border-purple-200" : "bg-sky-100 text-sky-800 border border-sky-200"}`}>
-                              {isInclusive ? "All-Inclusive Price" : "Separate Surcharge"}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Control 5: Bouquet Stock Availability (Instant Out-of-Stock Toggle) */}
-              <div className="pt-2.5 border-t border-stone-200/70">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <ShoppingBag className="h-3.5 w-3.5 text-stone-700" />
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700">
-                      5. Bouquet Stock Availability
-                    </label>
-                  </div>
-                  <div>
-                    {(() => {
-                      const outCount = storeStatus?.outOfStockProductIds?.length || 0;
-                      return (
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            outCount > 0
-                              ? "bg-rose-100 text-rose-700 border border-rose-200"
-                              : "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                          }`}
-                        >
-                          {outCount > 0 ? `${outCount} Sold Out` : "All In Stock"}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-stone-500 mb-2 leading-relaxed">
-                  Ran out of blooms today? Tap any bouquet below to mark it <strong>Sold Out</strong> on your website. Tap again to restore when fresh stock arrives:
-                </p>
-
-                {/* Products Stock List */}
-                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-0.5">
-                  {store.products.map((prod) => {
-                    const isOut = Boolean(
-                      storeStatus?.outOfStockProductIds?.includes(prod.id)
-                    );
-                    return (
-                      <div
-                        key={prod.id}
-                        className={`flex items-center justify-between p-2 rounded-xl border transition-all ${
-                          isOut
-                            ? "bg-rose-50/70 border-rose-200/80"
-                            : "bg-white border-stone-200/80 hover:border-stone-300"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                          <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-stone-100 border border-stone-200/60">
-                            <Image
-                              src={prod.image}
-                              alt={prod.name}
-                              fill
-                              sizes="36px"
-                              className={`object-cover ${isOut ? "grayscale opacity-75" : ""}`}
-                            />
-                            {isOut && (
-                              <div className="absolute inset-0 bg-black/35 flex items-center justify-center">
-                                <Ban className="h-3.5 w-3.5 text-white stroke-[3]" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <span
-                              className={`block text-[11px] font-bold truncate ${
-                                isOut ? "text-stone-500 line-through" : "text-stone-900"
-                              }`}
-                            >
-                              {prod.name}
-                            </span>
-                            <span className="text-[10px] text-stone-500">
-                              {currency} {prod.price.toFixed(2)} &bull; {prod.category || "Bouquet"}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* 1-Tap Toggle Pill with Loading Indicator */}
-                        <button
-                          type="button"
-                          disabled={isUpdatingStatus || updatingStockProductId === prod.id}
-                          onClick={() => handleToggleProductStock(prod.id)}
-                          className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all shadow-2xs ${
-                            updatingStockProductId === prod.id
-                              ? "opacity-80 cursor-wait bg-stone-100 text-stone-600 border border-stone-300"
-                              : isOut
-                              ? "bg-rose-600 hover:bg-rose-700 text-white cursor-pointer active:scale-95"
-                              : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 cursor-pointer active:scale-95"
-                          }`}
-                        >
-                          {updatingStockProductId === prod.id ? (
-                            <>
-                              <Loader2 className="h-3 w-3 animate-spin text-stone-600" />
-                              <span>Updating...</span>
-                            </>
-                          ) : isOut ? (
-                            <>
-                              <Ban className="h-3 w-3 stroke-[2.5]" />
-                              <span>Sold Out</span>
-                            </>
-                          ) : (
-                            <>
-                              <Check className="h-3 w-3 stroke-[3]" />
-                              <span>In Stock</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Reset all button if any item is out */}
-                {(storeStatus?.outOfStockProductIds?.length || 0) > 0 && (
-                  <div className="pt-2 flex justify-end">
-                    <button
-                      type="button"
-                      disabled={isUpdatingStatus || isResettingAllStock}
-                      onClick={handleResetAllStock}
-                      className="inline-flex items-center gap-1 text-[10px] font-bold text-stone-600 hover:text-stone-900 underline cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-                    >
-                      {isResettingAllStock ? (
-                        <>
-                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                          <span>Resetting All...</span>
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-2.5 w-2.5" />
-                          <span>Reset: Mark All Bouquets In Stock</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
+                  Pause
+                </button>
               </div>
             </div>
           )}
+        </section>
+
+        {/* 3. CAPACITY AND NOTICE LINK */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setIsCapacitySheetOpen(true)}
+            className="text-[13px] font-bold text-[var(--brand,#be185d)] hover:underline inline-flex items-center gap-1 cursor-pointer"
+          >
+            <span>Capacity and notice</span>
+            <span>&rsaquo;</span>
+          </button>
         </div>
 
-        {/* Daily Financials & Channel Overview (Collapsible Progressive Disclosure) */}
-        <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden transition-all">
-          <div className="px-3.5 py-2.5 flex items-center justify-between gap-2.5">
-            <button
-              type="button"
-              onClick={() => setShowFinancialSummary(!showFinancialSummary)}
-              className="flex items-center gap-2.5 min-w-0 text-left cursor-pointer group flex-1"
-            >
-              <div className="h-8 w-8 rounded-xl bg-stone-100 flex items-center justify-center text-stone-700 shrink-0 group-hover:bg-stone-200/70 transition-colors">
-                <PieChart className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold text-stone-900">
-                    Today&apos;s Financials
-                  </span>
-                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.2 rounded-full border border-emerald-200/80">
-                    {todayOrders.length} orders &bull; {currency} {todayRevenue.toFixed(0)}
-                  </span>
+        {/* CAPACITY AND NOTICE DRAWER (Draggable vaul bottom sheet) */}
+        <Drawer
+          open={isCapacitySheetOpen}
+          onOpenChange={setIsCapacitySheetOpen}
+          repositionInputs={false}
+        >
+          <DrawerContent className="max-w-lg mx-auto overflow-hidden bg-[#faf9f6] border-t border-stone-200 flex flex-col h-auto max-h-[90vh] max-h-[90svh]">
+            {/* Header */}
+            <DrawerHeader className="relative border-b border-stone-200/80 bg-white px-5 pt-3 pb-3 shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <DrawerTitle className="text-base font-bold text-stone-900 tracking-tight">
+                    Capacity &amp; Notice
+                  </DrawerTitle>
+                  <DrawerDescription className="text-xs text-stone-500 mt-0.5">
+                    Manage real-time order intake and customer announcements
+                  </DrawerDescription>
                 </div>
-                <div className="text-[10px] text-stone-400 truncate mt-0.5">
-                  {todayChannelStats.webCount} Web &bull; {todayChannelStats.walkInCount} Walk-In &bull; {todayChannelStats.phoneCount} Phone
-                </div>
+                <DrawerClose asChild>
+                  <button
+                    type="button"
+                    className="p-1.5 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+                    aria-label="Close"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </DrawerClose>
               </div>
-            </button>
+            </DrawerHeader>
 
-            <div className="flex items-center gap-1.5 shrink-0">
+            {/* Scrollable Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4 text-xs">
+              {/* Row 1: Same-day switch */}
+              <div className="flex items-center justify-between gap-3 py-1.5 border-b border-stone-100 pb-3.5">
+                <div>
+                  <b className="text-sm font-semibold text-stone-900 block">Same-day orders</b>
+                  <span className="text-xs text-stone-500">Allow customers to book delivery today</span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={!isTodayPaused}
+                  onClick={() => {
+                    const nextVal = !isTodayPaused;
+                    handleToggleEmergency({ isTodayPaused: nextVal });
+                  }}
+                  className={`sw ${!isTodayPaused ? "on" : ""}`}
+                >
+                  <i />
+                </button>
+              </div>
+
+              {/* Row 2: Tomorrow switch */}
+              <div className="flex items-center justify-between gap-3 py-1.5 border-b border-stone-100 pb-3.5">
+                <div>
+                  <b className="text-sm font-semibold text-stone-900 block">Tomorrow orders</b>
+                  <span className="text-xs text-stone-500">Block if you are closed</span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={!isTomorrowBlocked}
+                  onClick={() => {
+                    const nextVal = !isTomorrowBlocked;
+                    handleToggleEmergency({ isTomorrowBlocked: nextVal });
+                  }}
+                  className={`sw ${!isTomorrowBlocked ? "on" : ""}`}
+                >
+                  <i />
+                </button>
+              </div>
+
+              {/* Row 3: Daily order limit */}
+              <div className="flex items-center justify-between gap-3 py-1.5 border-b border-stone-100 pb-3.5">
+                <div>
+                  <b className="text-sm font-semibold text-stone-900 block">Daily order limit</b>
+                  <span className="text-xs text-stone-500">
+                    {todayOrders.filter((o) => o.fulfillmentStatus !== "cancelled").length} of {dailyLimit} used today
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={dailyLimit <= todayOrders.filter((o) => o.fulfillmentStatus !== "cancelled").length}
+                    onClick={() => {
+                      const minVal = todayOrders.filter((o) => o.fulfillmentStatus !== "cancelled").length;
+                      setDailyLimit((l) => Math.max(minVal, l - 1));
+                      setLimitPulse((p) => p + 1);
+                    }}
+                    className="w-9 h-9 rounded-full border border-stone-200 bg-stone-100 text-stone-800 font-bold text-base flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-stone-200 active:scale-95 transition-all cursor-pointer"
+                  >
+                    &minus;
+                  </button>
+                  <span
+                    key={limitPulse}
+                    className={`text-base font-black text-stone-900 w-8 text-center tabular-nums ${
+                      limitPulse ? "pop-num" : ""
+                    }`}
+                  >
+                    {dailyLimit}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={dailyLimit >= 60}
+                    onClick={() => {
+                      setDailyLimit((l) => Math.min(60, l + 1));
+                      setLimitPulse((p) => p + 1);
+                    }}
+                    className="w-9 h-9 rounded-full border border-stone-200 bg-stone-100 text-stone-800 font-bold text-base flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-stone-200 active:scale-95 transition-all cursor-pointer"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 4: Customer notice input */}
+              <div className="pt-1">
+                <label className="text-xs font-semibold text-stone-700 block mb-1.5">
+                  Customer notice
+                </label>
+                <input
+                  type="text"
+                  placeholder="Notice for customers, e.g. Closed early on Sunday"
+                  value={emergencyNoticeInput}
+                  onChange={(e) => setEmergencyNoticeInput(e.target.value)}
+                  className="w-full text-xs rounded-xl border border-stone-200/90 bg-white px-3.5 py-3 text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-900 shadow-2xs transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Bottom Fixed Area (like Image 3) */}
+            <DrawerFooter>
+              <button
+                type="button"
+                onClick={() => {
+                  handleToggleEmergency(
+                    { emergencyNotice: emergencyNoticeInput.trim() },
+                    { immediate: true }
+                  );
+                  setIsCapacitySheetOpen(false);
+                  showToast("Settings saved");
+                }}
+                className="w-full min-h-[46px] rounded-full bg-[var(--brand,#be185d)] hover:opacity-95 text-white font-bold text-sm shadow-md active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center"
+              >
+                Save
+              </button>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
+
+        {/* 4. TODAY CARD */}
+        <section className="td">
+          {/* Row 1: Date & Count Chip */}
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] text-stone-500 font-semibold">{todayDateFormatted}</span>
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--brand,#be185d)_12%,transparent)] text-[var(--brand,#be185d)]">
+              {todayOrders.filter((o) => o.fulfillmentStatus !== "cancelled").length} orders
+            </span>
+          </div>
+
+          {/* Row 2: Revenue */}
+          <div className="rev">
+            {currency} {animatedRevenue.toLocaleString("en-MY", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </div>
+
+          {/* Row 3: Stacked Bar & Legend */}
+          <div>
+            <div className="bar">
+              {todayOrders.filter((o) => o.fulfillmentStatus !== "cancelled").length === 0 ? (
+                <div className="w-full bg-stone-200 h-full rounded-full" />
+              ) : (
+                <>
+                  {todayChannelStats.webCount > 0 && (
+                    <div
+                      style={{
+                        width: `${(todayChannelStats.webCount / todayOrders.filter((o) => o.fulfillmentStatus !== "cancelled").length) * 100}%`,
+                        backgroundColor: "var(--brand, #be185d)",
+                      }}
+                      className="h-full transition-all duration-300"
+                    />
+                  )}
+                  {todayChannelStats.walkInCount > 0 && (
+                    <div
+                      style={{
+                        width: `${(todayChannelStats.walkInCount / todayOrders.filter((o) => o.fulfillmentStatus !== "cancelled").length) * 100}%`,
+                        backgroundColor: "#10b981",
+                      }}
+                      className="h-full transition-all duration-300"
+                    />
+                  )}
+                  {todayChannelStats.phoneCount > 0 && (
+                    <div
+                      style={{
+                        width: `${(todayChannelStats.phoneCount / todayOrders.filter((o) => o.fulfillmentStatus !== "cancelled").length) * 100}%`,
+                        backgroundColor: "#3b82f6",
+                      }}
+                      className="h-full transition-all duration-300"
+                    />
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2.5 text-xs text-stone-500 font-medium">
+              <div>
+                {[
+                  todayChannelStats.webCount > 0 ? `${todayChannelStats.webCount} Web` : null,
+                  todayChannelStats.walkInCount > 0 ? `${todayChannelStats.walkInCount} Walk-In` : null,
+                  todayChannelStats.phoneCount > 0 ? `${todayChannelStats.phoneCount} Phone` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "0 orders"}
+              </div>
+
               <button
                 type="button"
                 onClick={openQuickOrder}
-                className="text-[11px] font-bold text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200/80 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 cursor-pointer transition-colors"
+                className="font-bold text-[var(--brand,#be185d)] hover:underline cursor-pointer"
               >
-                <Plus className="h-3 w-3" />
-                <span>Record</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowFinancialSummary(!showFinancialSummary)}
-                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
-                title={showFinancialSummary ? "Hide financials" : "View breakdown"}
-              >
-                {showFinancialSummary ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
+                + Record sale
               </button>
             </div>
           </div>
-
-          {/* Expanded Analytics Details */}
-          {showFinancialSummary && (
-            <div className="p-3.5 pt-2 border-t border-stone-100 space-y-3 bg-stone-50/40">
-              {/* 3 KPI Cards */}
-              <div className="grid grid-cols-3 gap-2">
-                {/* Card 1: Today Deliveries */}
-                <div className="bg-white rounded-xl border border-stone-200/80 p-2.5 shadow-2xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between text-stone-400">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
-                      Today
-                    </span>
-                    <Clock className="h-3 w-3 text-stone-400" />
-                  </div>
-                  <div className="mt-1.5">
-                    <span className="text-lg font-black text-stone-900">
-                      {todayOrders.length}
-                    </span>
-                    <span className="text-[10px] text-stone-500 ml-1">orders</span>
-                  </div>
-                  <div className="mt-0.5 text-[10px] font-semibold text-emerald-700">
-                    {currency} {todayRevenue.toFixed(0)}
-                  </div>
-                </div>
-
-                {/* Card 2: Tomorrow Deliveries */}
-                <div className="bg-white rounded-xl border border-stone-200/80 p-2.5 shadow-2xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between text-stone-400">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
-                      Tomorrow
-                    </span>
-                    <Calendar className="h-3 w-3 text-stone-400" />
-                  </div>
-                  <div className="mt-1.5">
-                    <span className="text-lg font-black text-stone-900">
-                      {tomorrowOrders.length}
-                    </span>
-                    <span className="text-[10px] text-stone-500 ml-1">orders</span>
-                  </div>
-                  <div className="mt-0.5 text-[10px] font-medium text-stone-500">
-                    Prep ready
-                  </div>
-                </div>
-
-                {/* Card 3: Month To Date Sales */}
-                <div className="bg-white rounded-xl border border-stone-200/80 p-2.5 shadow-2xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between text-stone-400">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
-                      This Month
-                    </span>
-                    <DollarSign className="h-3 w-3 text-emerald-600" />
-                  </div>
-                  <div className="mt-1.5">
-                    <span className="text-lg font-black text-stone-900">
-                      {currency} {monthRevenue.toFixed(0)}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 text-[10px] text-stone-400">
-                    Gross sales
-                  </div>
-                </div>
-              </div>
-
-              {/* 3 Channels Grid */}
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                {/* Channel 1: Web Store */}
-                <div className="rounded-xl bg-white border border-stone-200/80 p-2.5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-stone-700 uppercase tracking-wider">
-                      <Globe className="h-2.5 w-2.5 text-stone-500" />
-                      <span>Web Shop</span>
-                    </span>
-                    <span className="text-[10px] font-semibold text-stone-600 bg-stone-100 px-1.5 py-0.2 rounded-md">
-                      {todayChannelStats.webCount}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 font-bold text-stone-900 text-xs">
-                    {currency} {todayChannelStats.webRevenue.toFixed(0)}
-                  </div>
-                </div>
-
-                {/* Channel 2: Walk-In Retail */}
-                <div className="rounded-xl bg-white border border-stone-200/80 p-2.5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-stone-700 uppercase tracking-wider">
-                      <Store className="h-2.5 w-2.5 text-stone-500" />
-                      <span>Walk-In</span>
-                    </span>
-                    <span className="text-[10px] font-semibold text-stone-600 bg-stone-100 px-1.5 py-0.2 rounded-md">
-                      {todayChannelStats.walkInCount}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 font-bold text-stone-900 text-xs">
-                    {currency} {todayChannelStats.walkInRevenue.toFixed(0)}
-                  </div>
-                </div>
-
-                {/* Channel 3: Phone Order */}
-                <div className="rounded-xl bg-white border border-stone-200/80 p-2.5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-stone-700 uppercase tracking-wider">
-                      <Phone className="h-2.5 w-2.5 text-stone-500" />
-                      <span>Phone</span>
-                    </span>
-                    <span className="text-[10px] font-semibold text-stone-600 bg-stone-100 px-1.5 py-0.2 rounded-md">
-                      {todayChannelStats.phoneCount}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 font-bold text-stone-900 text-xs">
-                    {currency} {todayChannelStats.phoneRevenue.toFixed(0)}
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment Method Distribution Bar */}
-              <div className="pt-2 border-t border-stone-200/70 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-stone-600">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                  Payment:
-                </span>
-                <div className="inline-flex items-center gap-1">
-                  <Banknote className="h-3 w-3 text-stone-500" />
-                  <span>Cash:</span>
-                  <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.cashTotal.toFixed(0)}</strong>
-                </div>
-                <div className="inline-flex items-center gap-1">
-                  <QrCode className="h-3 w-3 text-stone-500" />
-                  <span>DuitNow QR:</span>
-                  <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.duitnowTotal.toFixed(0)}</strong>
-                </div>
-                <div className="inline-flex items-center gap-1">
-                  <ShieldCheck className="h-3 w-3 text-stone-500" />
-                  <span>TNG / QR:</span>
-                  <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.tngTotal.toFixed(0)}</strong>
-                </div>
-                {todayChannelStats.transferTotal > 0 && (
-                  <div className="inline-flex items-center gap-1">
-                    <CreditCard className="h-3 w-3 text-stone-500" />
-                    <span>Bank:</span>
-                    <strong className="text-stone-900 font-bold">{currency} {todayChannelStats.transferTotal.toFixed(0)}</strong>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+        </section>
 
         {/* View Tabs & Search Bar */}
         <div className="space-y-2.5">
@@ -2363,6 +2124,17 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           </div>
         )}
       </main>
+      {/* 5. FLOATING NEW ORDER BUTTON */}
+      <button
+        type="button"
+        onClick={openQuickOrder}
+        className="fab"
+        aria-label="New order"
+      >
+        <span className="text-lg leading-none font-black">＋</span>
+        <span>New order</span>
+      </button>
+
 
       {/* ============================================================ */}
       {/* MODAL: RESCHEDULE DELIVERY SLOT & 1-TAP WHATSAPP NEGOTIATION */}
@@ -2390,7 +2162,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             aria-modal="true"
             aria-label="Reschedule Delivery Slot"
             onClick={closeRescheduleModal}
-            className={`fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto cursor-pointer ${
+            className={`fixed inset-0 z-50 bk backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto cursor-pointer ${
               isRescheduleClosing ? "modal-backdrop-exit" : "modal-backdrop-enter"
             }`}
           >
@@ -2486,7 +2258,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                       }}
                       className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                         rescheduleState.deliveryDate === todayStr
-                          ? "bg-stone-900 text-white border-stone-900 shadow-2xs"
+                          ? "bg-[var(--brand,#be185d)] text-white border-[var(--brand,#be185d)] shadow-2xs"
                           : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50"
                       }`}
                     >
@@ -2510,7 +2282,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                       }
                       className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                         rescheduleState.deliveryDate === tomorrowStr
-                          ? "bg-stone-900 text-white border-stone-900 shadow-2xs"
+                          ? "bg-[var(--brand,#be185d)] text-white border-[var(--brand,#be185d)] shadow-2xs"
                           : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50"
                       }`}
                     >
@@ -2629,7 +2401,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                               : prev
                           )
                         }
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-900 text-white text-xs font-semibold hover:bg-black transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--brand,#be185d)] text-white text-xs font-semibold hover:opacity-95 transition-all cursor-pointer"
                       >
                         <Calendar className="h-3.5 w-3.5" />
                         <span>Switch to Tomorrow ({tomorrowStr})</span>
@@ -2764,7 +2536,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                         type="button"
                         onClick={handleSaveReschedule}
                         disabled={isSaveDisabled}
-                        className="flex-1 sm:flex-none py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-black text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        className="flex-1 sm:flex-none py-2.5 px-4 rounded-xl bg-[var(--brand,#be185d)] hover:opacity-95 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                       >
                         {isSavingSlot ? (
                           <>
@@ -2796,7 +2568,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           aria-modal="true"
           aria-label="Quick Record Order"
           onClick={handleCloseQuickOrder}
-          className={`fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto cursor-pointer ${
+          className={`fixed inset-0 z-50 bk backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto cursor-pointer ${
             isQuickOrderClosing ? "modal-backdrop-exit" : "modal-backdrop-enter"
           }`}
         >
@@ -2809,7 +2581,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             {/* Modal Header */}
             <div className="px-5 py-3.5 border-b border-stone-200/80 flex items-center justify-between bg-stone-50/90">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-xl bg-stone-900 text-white">
+                <div className="p-1.5 rounded-xl bg-[color-mix(in_srgb,var(--brand,#be185d)_12%,white)] text-[var(--brand,#be185d)] border border-[color-mix(in_srgb,var(--brand,#be185d)_25%,transparent)]">
                   <ShoppingBag className="h-4 w-4" />
                 </div>
                 <div>
@@ -2972,7 +2744,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                             }}
                             className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
                               isChecked
-                                ? "bg-stone-900 text-white border-stone-900 shadow-2xs"
+                                ? "bg-[var(--brand,#be185d)] text-white border-[var(--brand,#be185d)] shadow-2xs"
                                 : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50"
                             }`}
                           >
@@ -3003,7 +2775,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     }}
                     className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       quickFulfillment === "takeaway"
-                        ? "bg-stone-900 text-white border-stone-900 shadow-2xs"
+                        ? "bg-[var(--brand,#be185d)] text-white border-[var(--brand,#be185d)] shadow-2xs"
                         : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50"
                     }`}
                   >
@@ -3019,7 +2791,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     }}
                     className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       quickFulfillment === "pickup"
-                        ? "bg-stone-900 text-white border-stone-900 shadow-2xs"
+                        ? "bg-[var(--brand,#be185d)] text-white border-[var(--brand,#be185d)] shadow-2xs"
                         : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50"
                     }`}
                   >
@@ -3035,7 +2807,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     }}
                     className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       quickFulfillment === "delivery"
-                        ? "bg-stone-900 text-white border-stone-900 shadow-2xs"
+                        ? "bg-[var(--brand,#be185d)] text-white border-[var(--brand,#be185d)] shadow-2xs"
                         : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50"
                     }`}
                   >
@@ -3278,7 +3050,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                 <button
                   type="submit"
                   disabled={isSubmittingQuickOrder || quickOrderTotal <= 0}
-                  className="px-5 py-2.5 rounded-xl bg-stone-900 hover:bg-black text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-[var(--brand,#be185d)] hover:opacity-95 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmittingQuickOrder ? (
                     <>
@@ -3295,14 +3067,6 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
               </div>
             </form>
           </div>
-        </div>
-      )}
-
-      {/* Floating Bottom Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-stone-900 text-white px-4 py-2.5 rounded-full shadow-xl text-xs font-semibold flex items-center gap-2 animate-fade-in border border-white/10">
-          <Check className="h-3.5 w-3.5 text-emerald-400" />
-          <span>{toastMessage}</span>
         </div>
       )}
     </div>

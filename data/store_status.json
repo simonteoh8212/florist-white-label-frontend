@@ -2,11 +2,11 @@
   "autarix": {
     "storeSlug": "autarix",
     "isTodayPaused": false,
-    "pausedDate": "2026-10-26",
+    "pausedDate": "2026-10-29",
     "isTomorrowBlocked": false,
-    "blockedDate": "2026-10-27",
+    "blockedDate": "2026-10-30",
     "emergencyNotice": "",
-    "updatedAt": "2026-10-27T14:55:09.813Z",
+    "updatedAt": "2026-10-29T15:19:23.607Z",
     "outOfStockProductIds": []
   }
 }

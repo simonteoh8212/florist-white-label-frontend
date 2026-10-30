@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Product, StoreConfig, getProductLocalized } from "@/config/stores";
 import { useCartStore } from "@/store/cartStore";
 import { useTranslation } from "@/i18n/localeStore";
-import { ShoppingBag, Sparkles, ZoomIn, Ban } from "lucide-react";
+import { ShoppingBag, Sparkles, ZoomIn, Ban, Heart } from "lucide-react";
 import { useFavourites } from "@/components/FavouritesProvider";
 
 function BagPlusIcon({ className = "h-4.5 w-4.5" }: { className?: string }) {
@@ -138,7 +138,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               toggle(product.id);
             }}
           >
-            {isSaved ? "♥" : "♡"}
+            <Heart className="h-4 w-4" fill={isSaved ? "currentColor" : "none"} strokeWidth={2} />
           </button>
         </div>
 
@@ -259,7 +259,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             toggle(product.id);
           }}
         >
-          {isSaved ? "♥" : "♡"}
+          <Heart className="h-4 w-4" fill={isSaved ? "currentColor" : "none"} strokeWidth={2} />
         </button>
       </div>
 

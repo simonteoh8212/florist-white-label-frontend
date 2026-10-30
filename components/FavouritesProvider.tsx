@@ -5,9 +5,9 @@ import React, {
   useCallback,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
+import toast from "react-hot-toast";
 
 export interface ToastData {
   message: string;
@@ -36,8 +36,6 @@ const KEY = "af-wish";
 export function FavouritesProvider({ children }: { children: React.ReactNode }) {
   const [ids, setIds] = useState<string[]>([]);
   const [isFavouritesOpen, setIsFavouritesOpen] = useState(false);
-  const [toast, setToast] = useState<ToastData | null>(null);
-  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Hydration safety: render with empty list first, then load from localStorage
   useEffect(() => {
@@ -65,13 +63,28 @@ export function FavouritesProvider({ children }: { children: React.ReactNode }) 
 
   const showToast = useCallback(
     (message: string, action?: { label: string; onClick: () => void }) => {
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
+      if (action) {
+        toast(
+          (t) => (
+            <span className="flex items-center gap-2 text-xs font-semibold">
+              <span>{message}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  action.onClick();
+                }}
+                className="ml-1 rounded-md bg-stone-100 hover:bg-stone-200 px-2 py-0.5 text-xs font-bold text-[var(--brand,#be185d)] cursor-pointer"
+              >
+                {action.label}
+              </button>
+            </span>
+          ),
+          { icon: "🌸" }
+        );
+      } else {
+        toast.success(message);
       }
-      setToast({ message, action });
-      toastTimerRef.current = setTimeout(() => {
-        setToast(null);
-      }, 1800);
     },
     []
   );
@@ -123,34 +136,6 @@ export function FavouritesProvider({ children }: { children: React.ReactNode }) 
       }}
     >
       {children}
-
-      {/* Global Wishlist Toast */}
-      {toast && (
-        <div
-          className="toast show cursor-pointer"
-          role="status"
-          aria-live="polite"
-          onClick={() => {
-            if (toast.action) {
-              toast.action.onClick();
-            }
-          }}
-        >
-          <span>{toast.message}</span>
-          {toast.action && (
-            <button
-              type="button"
-              className="act focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
-              onClick={(e) => {
-                e.stopPropagation();
-                toast.action?.onClick();
-              }}
-            >
-              {toast.action.label}
-            </button>
-          )}
-        </div>
-      )}
     </FavouritesContext.Provider>
   );
 }

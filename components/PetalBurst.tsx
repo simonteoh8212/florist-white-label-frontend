@@ -4,12 +4,14 @@ import React, { useEffect, useState } from "react";
 
 type Petal = { id: number; ch: string; x: number; y: number; r: number; d: number };
 
-const make = (): Petal[] =>
+const BURST_DURATION_MS = 1900;
+
+const make = (wave: number): Petal[] =>
   Array.from({ length: 28 }, (_, i) => {
     const a = Math.random() * Math.PI * 2;
     const dist = 90 + Math.random() * 170;
     return {
-      id: i,
+      id: wave * 100 + i,
       ch: ["🌸", "🌺", "💮"][i % 3],
       x: Math.cos(a) * dist,
       y: Math.sin(a) * dist + 120,
@@ -18,7 +20,12 @@ const make = (): Petal[] =>
     };
   });
 
-export function PetalBurst() {
+export interface PetalBurstProps {
+  loop?: boolean;
+  pauseMs?: number;
+}
+
+export function PetalBurst({ loop = true, pauseMs = 2000 }: PetalBurstProps = {}) {
   const [petals, setPetals] = useState<Petal[]>([]);
 
   useEffect(() => {
@@ -28,11 +35,39 @@ export function PetalBurst() {
     ) {
       return;
     }
-    setPetals(make());
-    navigator.vibrate?.(10);
-    const t = setTimeout(() => setPetals([]), 1900);
-    return () => clearTimeout(t);
-  }, []);
+
+    let cancelled = false;
+    let wave = 0;
+    let clearTimer: ReturnType<typeof setTimeout> | undefined;
+    let nextTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const triggerBurst = (isFirst: boolean) => {
+      if (cancelled) return;
+      setPetals(make(wave++));
+      if (isFirst) {
+        navigator.vibrate?.(10);
+      }
+
+      clearTimer = setTimeout(() => {
+        if (cancelled) return;
+        setPetals([]);
+
+        if (loop) {
+          nextTimer = setTimeout(() => {
+            triggerBurst(false);
+          }, pauseMs);
+        }
+      }, BURST_DURATION_MS);
+    };
+
+    triggerBurst(true);
+
+    return () => {
+      cancelled = true;
+      if (clearTimer) clearTimeout(clearTimer);
+      if (nextTimer) clearTimeout(nextTimer);
+    };
+  }, [loop, pauseMs]);
 
   return (
     <>

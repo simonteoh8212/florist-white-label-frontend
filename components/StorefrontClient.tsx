@@ -50,7 +50,7 @@ function HeaderFavouritesButton() {
       className="fvb focus-visible:outline-2 focus-visible:outline-stone-800"
       aria-label={`Favourites (${count})`}
     >
-      ♥
+      <Heart className="h-5 w-5" fill={count > 0 ? "currentColor" : "none"} strokeWidth={2} />
       {count > 0 && (
         <b key={count} className="bump" aria-hidden="true">
           {count}

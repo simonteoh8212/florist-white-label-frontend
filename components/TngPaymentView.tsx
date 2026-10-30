@@ -29,6 +29,8 @@ import {
   Smartphone,
   Sparkles,
 } from "lucide-react";
+import { SuccessCheck } from "@/components/SuccessCheck";
+import { PetalBurst } from "@/components/PetalBurst";
 
 interface TngPaymentViewProps {
   store?: StoreConfig;
@@ -165,6 +167,24 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
             {isGatewayMode ? t("instantGatewayVerification") : t("proofVerification")}
           </span>
         </div>
+      </div>
+
+      {/* Animated Check & Petal Celebration Effect (matching Screen 3) */}
+      <div className="flex flex-col items-center text-center pt-1 pb-0.5">
+        <SuccessCheck label={locale === "zh" ? "订单已提交" : "Order placed"} />
+        <PetalBurst loop pauseMs={2000} />
+        <p className="mt-2.5 text-sm font-bold text-stone-900 tracking-tight">
+          {locale === "zh" ? "订单已提交！请完成下方付款" : "Order Placed! Complete Payment Below"}
+        </p>
+        <p className="mt-0.5 text-xs text-stone-500 leading-relaxed">
+          {isGatewayMode
+            ? locale === "zh"
+              ? "您的花礼订单已保留，请点击下方按钮前往付款。"
+              : "Your floral order is reserved — proceed below to pay securely."
+            : locale === "zh"
+            ? "请扫描 TNG 二维码付款，并通过 WhatsApp 发送付款截图。"
+            : "Scan the Touch 'n Go QR below and send your receipt via WhatsApp."}
+        </p>
       </div>
 
       {/* Payment Summary Box */}

@@ -14,7 +14,7 @@ import { useCartStore } from "@/store/cartStore";
 import { useFavourites } from "@/components/FavouritesProvider";
 import { useTranslation } from "@/i18n/localeStore";
 import { StoreEmergencyStatus } from "@/lib/storeStatus";
-import { X } from "lucide-react";
+import { X, Heart } from "lucide-react";
 
 interface FavouritesDrawerProps {
   store: StoreConfig;
@@ -119,7 +119,8 @@ export const FavouritesDrawer: React.FC<FavouritesDrawerProps> = ({
                 color: primaryColor,
               }}
             >
-              <span>♥ Favourites ({savedProducts.length})</span>
+              <Heart className="h-3.5 w-3.5 fill-current" />
+              <span>Favourites ({savedProducts.length})</span>
             </div>
           </div>
         </DrawerHeader>
@@ -128,9 +129,9 @@ export const FavouritesDrawer: React.FC<FavouritesDrawerProps> = ({
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-3.5 space-y-2.5">
           {savedProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center p-6 space-y-2">
-              <span className="text-5xl select-none" aria-hidden="true">
-                🤍
-              </span>
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-stone-100 text-stone-300 mb-1">
+                <Heart className="h-8 w-8 stroke-[1.5]" />
+              </div>
               <h3 className="text-base font-bold text-stone-900 mt-2">
                 No favourites yet
               </h3>
@@ -227,9 +228,10 @@ export const FavouritesDrawer: React.FC<FavouritesDrawerProps> = ({
                     <button
                       type="button"
                       onClick={() => remove(product.id)}
-                      className="text-[11px] text-stone-400 hover:text-stone-700 transition-colors cursor-pointer py-0.5 focus-visible:outline-1 focus-visible:outline-stone-500"
+                      className="inline-flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-700 transition-colors cursor-pointer py-1.5 px-2 rounded-lg hover:bg-stone-100 min-h-[34px] focus-visible:outline-1 focus-visible:outline-stone-500"
                     >
-                      ✕ Remove
+                      <X className="h-3 w-3" />
+                      <span>Remove</span>
                     </button>
                   </div>
                 </div>
