@@ -16,7 +16,7 @@ export const STORES: Record<string, StoreConfig> = {
     currency: "RM",
     pickupAddress: "1-G-6, Medan Angsana 4, Farlim Business Centre, 11500 Ayer Itam, Pulau Pinang",
     googleMapsUrl: "https://maps.app.goo.gl/LqXTrwJFXAhr1rtA7",
-    tngQrUrl: "/stores/autarix/tng-qr.svg",
+    tngQrUrl: "/stores/autarix/tng-qr.webp",
     tngAccountName: "Autarix Florist & Gift (TNG eWallet)",
     tngDeepLink: "tngewallet://",
     paymentMode: "static_qr",
@@ -119,11 +119,18 @@ export const STORES: Record<string, StoreConfig> = {
     deliveryFeeConfig: {
       enabled: true,
       freeDeliveryThreshold: 250, // Free delivery for orders RM 250 and above
+      autoDetectZone: true,
       zones: [
         {
           id: "island_central",
-          name: "Georgetown / Ayer Itam / Farlim / Jelutong",
-          nameZh: "乔治市 / 亚依淡 / 发林 / 日落洞",
+          name: "Georgetown / Jelutong",
+          nameZh: "乔治市 / 日落洞",
+          fee: 10,
+        },
+        {
+          id: "island_ayer_itam",
+          name: "Ayer Itam / Farlim",
+          nameZh: "亚依淡 / 发林",
           fee: 10,
         },
         {
@@ -135,7 +142,7 @@ export const STORES: Record<string, StoreConfig> = {
         {
           id: "penang_mainland",
           name: "Penang Mainland (Butterworth / Bukit Mertajam)",
-          nameZh: "槟城威省 (北海 / 大山脚 / 诗布朗再也)",
+          nameZh: "槟城威省 (北海 / 大山脚 )",
           fee: 30,
         },
       ],
@@ -213,6 +220,7 @@ export const STORES: Record<string, StoreConfig> = {
     deliveryFeeConfig: {
       enabled: true,
       freeDeliveryThreshold: 300,
+      autoDetectZone: true,
       zones: [
         {
           id: "mont_kiara",

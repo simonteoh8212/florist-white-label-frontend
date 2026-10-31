@@ -30,7 +30,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { SuccessCheck } from "@/components/SuccessCheck";
-import { PetalBurst } from "@/components/PetalBurst";
+import { CelebrateAnimation } from "@/components/CelebrateAnimation";
 
 interface TngPaymentViewProps {
   store?: StoreConfig;
@@ -146,7 +146,103 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
   };
 
   const isGatewayMode = store.paymentMode === "gateway";
-  const tngQrUrl = store.tngQrUrl || "/stores/autarix/tng-qr.svg";
+  const tngQrUrl = store.tngQrUrl || "/stores/autarix/tng-qr.webp";
+
+  const renderAmountSummary = () => (
+    <>
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">
+            {t("totalPayableAmount")}
+          </span>
+          <div className="mt-0.5 text-2xl font-black text-stone-900 tracking-tight">
+            {priceFormatted}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={copyAmountToClipboard}
+          className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-2xs hover:bg-stone-100 active:scale-95 transition-all cursor-pointer"
+          title="Copy exact amount"
+        >
+          {hasCopiedAmount ? (
+            <>
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="text-emerald-700 font-bold">{t("copied")}</span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3.5 w-3.5 text-stone-500" />
+              <span>{t("copy")}</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Itemized breakdown */}
+      <div className="mt-3 space-y-1.5 border-t border-stone-100 pt-2.5 text-xs text-stone-600">
+        {selectedProduct && (
+          <div className="flex items-center justify-between">
+            <span className="truncate font-medium text-stone-700 flex items-center gap-1.5">
+              <span>{selectedLocalized?.name || selectedProduct.name}</span>
+              {isHolidayInclusive && (
+                <span className="text-[9px] font-semibold text-rose-700 bg-rose-50 px-1 py-0.2 rounded border border-rose-200">
+                  {t("holidayInclusiveBadge")}
+                </span>
+              )}
+            </span>
+            <span className="font-semibold text-stone-900 shrink-0">
+              {currency} {effectiveProductPrice.toFixed(2)}
+            </span>
+          </div>
+        )}
+
+        {activeAddons.map((addon) => (
+          <div
+            key={addon.id}
+            className="flex items-center justify-between text-[11px] text-stone-500"
+          >
+            <span className="truncate">
+              + {locale === "zh" ? addon.nameZh || addon.name : addon.name}
+            </span>
+            <span className="font-medium shrink-0">
+              +{currency} {addon.price.toFixed(2)}
+            </span>
+          </div>
+        ))}
+
+        {isDelivery && isDeliveryFeeEnabled && (
+          <div className="flex items-center justify-between text-[11px] text-stone-500">
+            <span className="truncate">
+              {selectedZone
+                ? locale === "zh"
+                  ? selectedZone.nameZh || selectedZone.name
+                  : selectedZone.name
+                : t("deliveryFee")}
+            </span>
+            <span className="font-medium shrink-0">
+              {isFreeDelivery
+                ? t("freeDeliveryApplied")
+                : `+${currency} ${deliveryFee.toFixed(2)}`}
+            </span>
+          </div>
+        )}
+
+        {holidayLineItemSurcharge > 0 && holidayRule && !isHolidayInclusive && (
+          <div className="flex items-center justify-between text-[11px] text-rose-700">
+            <span className="truncate font-medium">
+              + {locale === "zh" ? holidayRule.nameZh || holidayRule.name : holidayRule.name}
+              {holidayRule.surchargeType === "percentage" ? ` (+${holidayRule.surchargeAmount}%)` : ""}
+            </span>
+            <span className="font-medium shrink-0">
+              +{currency} {holidayLineItemSurcharge.toFixed(2)}
+            </span>
+          </div>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <div className="flex flex-col space-y-4 pb-6">
@@ -169,10 +265,11 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
         </div>
       </div>
 
-      {/* Animated Check & Petal Celebration Effect (matching Screen 3) */}
+      {/* Animated Check & Celebration Effect (matching Screen 3) */}
       <div className="flex flex-col items-center text-center pt-1 pb-0.5">
-        <SuccessCheck label={locale === "zh" ? "订单已提交" : "Order placed"} />
-        <PetalBurst loop pauseMs={2000} />
+        <SuccessCheck label={locale === "zh" ? "订单已提交" : "Order placed"}>
+          <CelebrateAnimation loop pauseMs={2000} />
+        </SuccessCheck>
         <p className="mt-2.5 text-sm font-bold text-stone-900 tracking-tight">
           {locale === "zh" ? "订单已提交！请完成下方付款" : "Order Placed! Complete Payment Below"}
         </p>
@@ -187,114 +284,24 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
         </p>
       </div>
 
-      {/* Payment Summary Box */}
-      <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">
-              {t("totalPayableAmount")}
-            </span>
-            <div className="mt-0.5 text-2xl font-black text-stone-900 tracking-tight">
-              {priceFormatted}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={copyAmountToClipboard}
-            className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-2xs hover:bg-stone-100 active:scale-95 transition-all cursor-pointer"
-            title="Copy exact amount"
-          >
-            {hasCopiedAmount ? (
-              <>
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                <span className="text-emerald-700 font-bold">{t("copied")}</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3.5 w-3.5 text-stone-500" />
-                <span>{t("copy")}</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Itemized breakdown */}
-        <div className="mt-3 space-y-1.5 border-t border-stone-100 pt-2.5 text-xs text-stone-600">
-          {selectedProduct && (
-            <div className="flex items-center justify-between">
-              <span className="truncate font-medium text-stone-700 flex items-center gap-1.5">
-                <span>{selectedLocalized?.name || selectedProduct.name}</span>
-                {isHolidayInclusive && (
-                  <span className="text-[9px] font-semibold text-rose-700 bg-rose-50 px-1 py-0.2 rounded border border-rose-200">
-                    {t("holidayInclusiveBadge")}
-                  </span>
-                )}
-              </span>
-              <span className="font-semibold text-stone-900 shrink-0">
-                {currency} {effectiveProductPrice.toFixed(2)}
-              </span>
-            </div>
-          )}
-
-          {activeAddons.map((addon) => (
-            <div
-              key={addon.id}
-              className="flex items-center justify-between text-[11px] text-stone-500"
-            >
-              <span className="truncate">
-                + {locale === "zh" ? addon.nameZh || addon.name : addon.name}
-              </span>
-              <span className="font-medium shrink-0">
-                +{currency} {addon.price.toFixed(2)}
-              </span>
-            </div>
-          ))}
-
-          {isDelivery && isDeliveryFeeEnabled && (
-            <div className="flex items-center justify-between text-[11px] text-stone-500">
-              <span className="truncate">
-                {selectedZone
-                  ? locale === "zh"
-                    ? selectedZone.nameZh || selectedZone.name
-                    : selectedZone.name
-                  : t("deliveryFee")}
-              </span>
-              <span className="font-medium shrink-0">
-                {isFreeDelivery
-                  ? t("freeDeliveryApplied")
-                  : `+${currency} ${deliveryFee.toFixed(2)}`}
-              </span>
-            </div>
-          )}
-
-          {holidayLineItemSurcharge > 0 && holidayRule && !isHolidayInclusive && (
-            <div className="flex items-center justify-between text-[11px] text-rose-700">
-              <span className="truncate font-medium">
-                + {locale === "zh" ? holidayRule.nameZh || holidayRule.name : holidayRule.name}
-                {holidayRule.surchargeType === "percentage" ? ` (+${holidayRule.surchargeAmount}%)` : ""}
-              </span>
-              <span className="font-medium shrink-0">
-                +{currency} {holidayLineItemSurcharge.toFixed(2)}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Copy Notification Toast Banner */}
-      {hasCopiedAmount && (
-        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-          <span>
-            {t("amountCopiedBanner", { amount: priceFormatted })}
-          </span>
-        </div>
-      )}
-
       {/* GATEWAY MODE: Automated 1-Click Checkout */}
       {isGatewayMode ? (
         <div className="space-y-4">
+          {/* Payment Summary Box */}
+          <div className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-xs">
+            {renderAmountSummary()}
+          </div>
+
+          {/* Copy Notification Toast Banner */}
+          {hasCopiedAmount && (
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>
+                {t("amountCopiedBanner", { amount: priceFormatted })}
+              </span>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-blue-600/20 bg-blue-50/40 p-4 text-center">
             <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-[#0055B8] text-white">
               <QrCode className="h-5 w-5" />
@@ -317,75 +324,44 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
           </button>
         </div>
       ) : (
-        /* STATIC QR MODE: Deep Link Button + QR Code + WhatsApp Proof Bridge */
+        /* STATIC QR MODE: Unified QR Code + Amount Card + WhatsApp Proof Bridge */
         <div className="space-y-4">
-          {/* 1. Open TNG App Mobile Deep Link Button */}
-          <div>
-            <button
-              type="button"
-              onClick={handleOpenTngApp}
-              className="flex w-full items-center justify-between rounded-xl bg-[#0055B8] p-3.5 text-white shadow-md shadow-blue-600/20 hover:bg-[#00479b] active:scale-98 transition-all cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5 text-left">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15">
-                  <Smartphone className="h-4 w-4 text-white" />
+          {/* Unified Touch 'n Go QR Code & Amount Card (QR code shown first, Amount below) */}
+          <div className="rounded-2xl border border-stone-200/90 bg-white p-4 shadow-xs">
+            {/* 1. Touch 'n Go QR Code Display (shown first) */}
+            <div className="flex flex-col items-center">
+               <div className="relative h-[300px] w-full rounded-xl overflow-hidden bg-white">
+                  <Image
+                    src={tngQrUrl}
+                    alt={`${store.name} Touch 'n Go eWallet QR`}
+                    fill
+                    className="object-contain"
+                    priority
+                  />
                 </div>
-                <div>
-                  <div className="text-xs font-bold leading-tight">
-                    {t("openTngApp")}
-                  </div>
-                  <div className="text-[10px] text-blue-100 font-medium">
-                    {t("openTngAppSubtitle", { amount: priceFormatted })}
-                  </div>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-white/80 shrink-0" />
-            </button>
 
-            {hasLaunchedApp && (
-              <p className="mt-1.5 text-center text-[10px] text-stone-500">
-                {t("openingTngHelper")}
+              <p className="mt-2.5 text-center text-[11px] text-stone-500">
+                {t("accountLabel")}{" "}
+                <span className="font-bold text-stone-800">{store.tngAccountName || store.name}</span>
               </p>
-            )}
+            </div>
+
+            {/* 2. Subtle Divider */}
+            <div className="my-3.5 border-t border-stone-100" />
+
+            {/* 3. Amount & Itemized Breakdown (grouped together) */}
+            {renderAmountSummary()}
           </div>
 
-          {/* 2. Touch 'n Go QR Code Display Card */}
-          <div className="relative flex flex-col items-center rounded-2xl border border-stone-200/90 bg-white p-4 shadow-xs">
-            <div className="mb-2.5 flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1 text-stone-700">
-              <QrCode className="h-3.5 w-3.5 text-stone-600" />
-              <span className="text-[11px] font-bold tracking-wide">
-                {t("orScanQr")}
+          {/* Copy Notification Toast Banner */}
+          {hasCopiedAmount && (
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>
+                {t("amountCopiedBanner", { amount: priceFormatted })}
               </span>
             </div>
-
-            {/* QR Code Container */}
-            <div className="relative h-48 w-48 overflow-hidden rounded-2xl border-2 border-stone-100 bg-stone-50 p-2 shadow-inner">
-              <div className="relative h-full w-full rounded-xl overflow-hidden bg-white">
-                <Image
-                  src={tngQrUrl}
-                  alt={`${store.name} Touch 'n Go eWallet QR`}
-                  fill
-                  className="object-contain"
-                  priority
-                />
-              </div>
-            </div>
-
-            <p className="mt-2.5 text-center text-[11px] text-stone-500">
-              {t("accountLabel")}{" "}
-              <span className="font-bold text-stone-800">{store.tngAccountName || store.name}</span>
-            </p>
-
-            <a
-              href={tngQrUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-stone-600 hover:text-stone-900 underline underline-offset-2"
-            >
-              <span>{t("viewQrFullscreen")}</span>
-              <ExternalLink className="h-3 w-3 text-stone-400" />
-            </a>
-          </div>
+          )}
 
           {/* 3. Guidance Steps Card */}
           <div className="rounded-2xl border border-amber-200/60 bg-amber-50/50 p-3.5 text-xs">
@@ -394,7 +370,6 @@ export const TngPaymentView: React.FC<TngPaymentViewProps> = ({
               <span>{t("howToCompleteOrder")}</span>
             </p>
             <ol className="mt-2 list-decimal list-inside space-y-1 text-[11px] leading-relaxed text-amber-900/90 pl-0.5">
-              <li>{t("step1Guide")}</li>
               <li>{t("step2Guide", { amount: priceFormatted })}</li>
               <li>{t("step3Guide")}</li>
             </ol>

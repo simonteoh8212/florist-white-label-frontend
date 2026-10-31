@@ -8,6 +8,8 @@ import {
   checkIfSlotIsRush,
   isSlotPassed,
   getSlotTimeStatus,
+  parseSlotRange,
+  parseTimeStringToMinutes,
 } from "@/config/stores";
 import { Order, FulfillmentStatus } from "@/lib/orders";
 import {
@@ -53,10 +55,13 @@ import {
   MoreHorizontal,
   LayoutList,
   LayoutGrid,
+  ArrowUpDown,
 } from "lucide-react";
 import { StoreEmergencyStatus } from "@/lib/storeStatus";
 import { SlidingPillTabs, SlidingPillItem } from "@/components/SlidingPillTabs";
 import { FloristOrderCard } from "@/components/FloristOrderCard";
+import { OrderSoundToggle } from "@/components/OrderSoundToggle";
+import { unlockAudioContext, playOrderAlertSound } from "@/lib/sound";
 import toast from "react-hot-toast";
 import {
   Drawer,
@@ -70,6 +75,32 @@ import {
 
 interface FloristOrderBookClientProps {
   store: StoreConfig;
+}
+
+/**
+ * Normalizes delivery slot into start minutes from midnight (0 - 1439)
+ * for chronological delivery schedule sorting (e.g. 10:00 AM -> 600, 1:00 PM -> 780, 7:00 PM -> 1140).
+ */
+function getSlotSortMinutes(slotStr: string): number {
+  if (!slotStr) return 9999;
+  const s = slotStr.toLowerCase();
+  if (
+    s.includes("immediate") ||
+    s.includes("takeaway") ||
+    s.includes("asap") ||
+    s.includes("now")
+  ) {
+    return 0; // Immediate counter takeaways take absolute top priority
+  }
+  const range = parseSlotRange(slotStr);
+  if (range && typeof range.startMinutes === "number") {
+    return range.startMinutes;
+  }
+  const direct = parseTimeStringToMinutes(slotStr);
+  if (direct !== null) {
+    return direct;
+  }
+  return 9999;
 }
 
 export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
@@ -98,8 +129,36 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
 
   // Orders State
   const [orders, setOrders] = useState<Order[]>([]);
+  const ordersRef = useRef<Order[]>([]);
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "upcoming" | "all">("today");
+  const [sortBy, setSortBy] = useState<"slot" | "created">("slot");
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const soundEnabledRef = useRef<boolean>(true);
+
+  // Sync sound alerts preference from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("florist_sound_alerts");
+      const isEnabled = saved !== "false";
+      setSoundEnabled(isEnabled);
+      soundEnabledRef.current = isEnabled;
+    }
+  }, []);
+
+  const handleToggleSound = useCallback((nextState: boolean) => {
+    setSoundEnabled(nextState);
+    soundEnabledRef.current = nextState;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("florist_sound_alerts", String(nextState));
+    }
+    toast.dismiss();
+    toast(nextState ? "🔔 Order sound alert enabled" : "🔕 Order sound alert muted");
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
@@ -283,6 +342,35 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     return `${m}:${s < 10 ? "0" : ""}${s}`;
   };
 
+  // Detect rush orders
+  const isRushOrder = useCallback((order: Order) => {
+    // 1. Must be scheduled for today (future or past dates are never same-day rush)
+    if (order.deliveryDate !== todayStr) {
+      return false;
+    }
+
+    // 2. Must have had rush marked in notes
+    const hasRushTag = Boolean(
+      order.notes &&
+        (order.notes.includes("Rush") || order.notes.includes("加急"))
+    );
+    if (!hasRushTag) {
+      return false;
+    }
+
+    // 3. If the order was rescheduled, re-check against the rescheduled slot!
+    if (order.notes && order.notes.includes("[Rescheduled:")) {
+      return checkIfSlotIsRush(
+        order.deliveryDate,
+        order.deliveryTimeSlot,
+        store.deliveryTimeConfig?.rushThresholdMinutes ?? 45,
+        store.deliveryTimeConfig?.slots
+      );
+    }
+
+    return true;
+  }, [todayStr, store.deliveryTimeConfig]);
+
   // Lockout countdown timer
   useEffect(() => {
     if (lockoutRemaining <= 0) {
@@ -305,18 +393,42 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     return () => clearInterval(timer);
   }, [lockoutRemaining, isLocked]);
 
-  // Fetch orders with PIN
+  // Fetch orders with PIN (supports silent background polling)
   const fetchOrders = useCallback(
-    async (pinToUse: string) => {
+    async (pinToUse: string, options?: { silent?: boolean }) => {
       if (isLocked) return;
-      setIsLoadingOrders(true);
+      if (!options?.silent) {
+        setIsLoadingOrders(true);
+      }
       try {
         const res = await fetch(
           `/api/orders?slug=${encodeURIComponent(store.slug)}&pin=${encodeURIComponent(pinToUse)}`
         );
         const data = await res.json();
         if (res.ok && data.success) {
-          setOrders(data.orders || []);
+          const incomingOrders: Order[] = data.orders || [];
+
+          // Detect new customer orders during silent background polling (executed safely outside React state updaters)
+          if (options?.silent && ordersRef.current.length > 0) {
+            const prevIds = new Set(ordersRef.current.map((o) => o.id));
+            const newlyAdded = incomingOrders.filter((o) => !prevIds.has(o.id));
+            if (newlyAdded.length > 0) {
+              // If sound alert is enabled, trigger the chime immediately
+              if (soundEnabledRef.current) {
+                const hasRush = newlyAdded.some((o) => isRushOrder(o));
+                playOrderAlertSound(hasRush ? "rush" : "standard");
+              }
+              const first = newlyAdded[0];
+              const methodLabel = first.fulfillmentMethod === "delivery" ? "Delivery" : "Pickup";
+              showToast(
+                `🔔 New ${methodLabel} order (#${first.id.replace(/^ord_/, "").slice(-6).toUpperCase()}) received!`
+              );
+            }
+          }
+
+          ordersRef.current = incomingOrders;
+          setOrders(incomingOrders);
+
           setIsAuthenticated(true);
           setAuthError("");
           setIsLocked(false);
@@ -342,14 +454,29 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
         }
       } catch (err) {
         console.error("Fetch orders failed:", err);
-        setAuthError("Network error. Please try again.");
+        if (!options?.silent) {
+          setAuthError("Network error. Please try again.");
+        }
       } finally {
-        setIsLoadingOrders(false);
-        setIsVerifying(false);
+        if (!options?.silent) {
+          setIsLoadingOrders(false);
+          setIsVerifying(false);
+        }
       }
     },
-    [store.slug, isLocked]
+    [store.slug, isLocked, isRushOrder, showToast]
   );
+
+  // Silent background polling every 15s to catch new incoming orders hands-free
+  useEffect(() => {
+    if (!isAuthenticated || !pin || isLocked) return;
+
+    const interval = setInterval(() => {
+      fetchOrders(pin, { silent: true });
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, pin, isLocked, fetchOrders]);
 
   // Check saved session PIN on load
   useEffect(() => {
@@ -365,6 +492,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
 
   // Handle PIN input key clicks
   const handlePinDigit = (digit: string) => {
+    unlockAudioContext();
     if (isLocked || isVerifying) return;
     if (pin.length < 4) {
       const nextPin = pin + digit;
@@ -742,35 +870,6 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     return cleaned;
   };
 
-  // Detect rush orders
-  const isRushOrder = (order: Order) => {
-    // 1. Must be scheduled for today (future or past dates are never same-day rush)
-    if (order.deliveryDate !== todayStr) {
-      return false;
-    }
-
-    // 2. Must have had rush marked in notes
-    const hasRushTag = Boolean(
-      order.notes &&
-        (order.notes.includes("Rush") || order.notes.includes("加急"))
-    );
-    if (!hasRushTag) {
-      return false;
-    }
-
-    // 3. If the order was rescheduled, re-check against the rescheduled slot!
-    if (order.notes && order.notes.includes("[Rescheduled:")) {
-      return checkIfSlotIsRush(
-        order.deliveryDate,
-        order.deliveryTimeSlot,
-        store.deliveryTimeConfig?.rushThresholdMinutes ?? 45,
-        store.deliveryTimeConfig?.slots
-      );
-    }
-
-    return true;
-  };
-
   const openRescheduleModal = (order: Order) => {
     const targetDate = order.deliveryDate >= todayStr ? order.deliveryDate : todayStr;
     const isPast = isSlotPassed(targetDate, order.deliveryTimeSlot, store.deliveryTimeConfig?.slots);
@@ -995,7 +1094,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
     }
   };
 
-  // Filter orders by active tab and search
+  // Filter orders by active tab, channel, search, and sort by delivery schedule or order creation
   const filteredOrders = useMemo(() => {
     let list = orders;
 
@@ -1026,8 +1125,58 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
       );
     }
 
-    return list;
-  }, [orders, activeTab, channelFilter, searchQuery, todayStr, tomorrowStr]);
+    const statusRank: Record<FulfillmentStatus, number> = {
+      new: 0,
+      preparing: 1,
+      ready: 2,
+      dispatched: 3,
+      completed: 4,
+      cancelled: 5,
+    };
+
+    return [...list].sort((a, b) => {
+      if (sortBy === "created") {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+
+      // Default: "slot" (Chronological Delivery Time)
+      // 1. Delivery Date (earliest date first, crucial for Upcoming & All tabs)
+      if (a.deliveryDate !== b.deliveryDate) {
+        return a.deliveryDate.localeCompare(b.deliveryDate);
+      }
+
+      // 2. Completed / Cancelled sink below active orders
+      const isDoneA = a.fulfillmentStatus === "completed" || a.fulfillmentStatus === "cancelled";
+      const isDoneB = b.fulfillmentStatus === "completed" || b.fulfillmentStatus === "cancelled";
+      if (isDoneA !== isDoneB) {
+        return isDoneA ? 1 : -1;
+      }
+
+      // 3. Earliest delivery slot start time (e.g. 10:00 AM -> 1:00 PM -> 7:00 PM)
+      const slotA = getSlotSortMinutes(a.deliveryTimeSlot);
+      const slotB = getSlotSortMinutes(b.deliveryTimeSlot);
+      if (slotA !== slotB) {
+        return slotA - slotB;
+      }
+
+      // 4. Same slot: Same-Day Rush orders take priority
+      const rushA = isRushOrder(a);
+      const rushB = isRushOrder(b);
+      if (rushA !== rushB) {
+        return rushA ? -1 : 1;
+      }
+
+      // 5. Same slot: status urgency (new -> preparing -> ready -> dispatched)
+      const rankA = statusRank[a.fulfillmentStatus] ?? 0;
+      const rankB = statusRank[b.fulfillmentStatus] ?? 0;
+      if (rankA !== rankB) {
+        return rankA - rankB;
+      }
+
+      // 6. Oldest order placed first within identical slot & status
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+  }, [orders, activeTab, channelFilter, searchQuery, sortBy, todayStr, tomorrowStr, isRushOrder]);
 
   // Operational metrics
   const todayOrders = useMemo(() => orders.filter((o) => o.deliveryDate === todayStr), [orders, todayStr]);
@@ -1715,6 +1864,12 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                     <span>Refresh orders</span>
                   </button>
 
+                  <OrderSoundToggle
+                    enabled={soundEnabled}
+                    onToggle={handleToggleSound}
+                    variant="menuitem"
+                  />
+
                   <Link
                     href={storefrontHref}
                     role="menuitem"
@@ -2052,7 +2207,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
           />
 
           {/* Channel Source Filter Pills (Reusable SlidingPillTabs) */}
-          <SlidingPillTabs
+          {/* <SlidingPillTabs
             items={channelTabItems}
             activeId={channelFilter}
             onChange={(id) => {
@@ -2066,7 +2221,7 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
             }
             size="sm"
             inactiveClassName="bg-stone-100 text-stone-600 hover:bg-stone-200/80"
-          />
+          /> */}
 
           {/* Search Box */}
           <div className="relative">
@@ -2087,6 +2242,35 @@ export function FloristOrderBookClient({ store }: FloristOrderBookClientProps) {
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Sort Status & Order Count Header Bar */}
+        <div className="flex items-center justify-between px-1 text-xs text-stone-500 font-medium">
+          <span>
+            {filteredOrders.length} {filteredOrders.length === 1 ? "order" : "orders"}
+            {activeTab === "today"
+              ? " scheduled today"
+              : activeTab === "tomorrow"
+              ? " scheduled tomorrow"
+              : activeTab === "upcoming"
+              ? " upcoming"
+              : ""}
+          </span>
+          <div className="flex items-center gap-2">
+            <OrderSoundToggle
+              enabled={soundEnabled}
+              onToggle={handleToggleSound}
+            />
+            <button
+              type="button"
+              onClick={() => setSortBy((prev) => (prev === "slot" ? "created" : "slot"))}
+              className="inline-flex items-center gap-1.5 font-semibold text-stone-700 hover:text-stone-900 bg-white border border-stone-200/90 rounded-lg px-2.5 py-1 text-xs shadow-2xs hover:bg-stone-50 active:scale-95 transition-all cursor-pointer min-h-[34px]"
+              title="Click to toggle sorting mode"
+            >
+              <ArrowUpDown className="h-3 w-3 text-stone-500" />
+              <span>{sortBy === "slot" ? "Earliest delivery" : "Newest placed"}</span>
+            </button>
           </div>
         </div>
 

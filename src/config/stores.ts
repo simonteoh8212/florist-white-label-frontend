@@ -37,6 +37,7 @@ export interface DeliveryZone {
 export interface DeliveryFeeConfig {
   enabled: boolean;
   freeDeliveryThreshold?: number; // e.g. 250 (RM 250 or more = free delivery)
+  autoDetectZone?: boolean; // When true, automatically infers delivery zone from postal code or address keywords
   zones: DeliveryZone[];
   defaultZoneId?: string;
 }

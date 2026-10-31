@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Image from "next/image";
 import {
   Drawer,
@@ -20,7 +20,10 @@ import { TngPaymentView } from "@/components/TngPaymentView";
 import { OrderSuccess } from "@/components/OrderSuccess";
 import { generateWhatsAppMessage, getWhatsAppUrl } from "@/utils/whatsapp";
 import { QtyStepper } from "@/components/QtyStepper";
+import { DeliveryZoneDropdown } from "@/components/DeliveryZoneDropdown";
 import { useCountUp } from "@/lib/useCountUp";
+import { detectDeliveryZone } from "@/lib/addressZoneDetector";
+import toast from "react-hot-toast";
 import {
   AlertCircle,
   AlertTriangle,
@@ -28,6 +31,7 @@ import {
   Ban,
   Calendar,
   Check,
+  ChevronDown,
   Clock,
   ExternalLink,
   Heart,
@@ -55,6 +59,20 @@ import {
   getHolidayLineItemSurcharge,
   convertPeakSlotsToDeliveryTimeSlots,
 } from "@/lib/holidayPricing";
+
+export type ValidationErrorField =
+  | "name"
+  | "phone"
+  | "date"
+  | "time"
+  | "deliveryZone"
+  | "deliveryAddress"
+  | "general";
+
+export interface ValidationErrorState {
+  field: ValidationErrorField;
+  message: string;
+}
 
 interface CheckoutDrawerProps {
   store?: StoreConfig;
@@ -120,13 +138,17 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
   const customerDetails = useCartStore((state) => state.customerDetails);
   const setCustomerDetails = useCartStore((state) => state.setCustomerDetails);
 
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<ValidationErrorState | null>(null);
   const [showProductImageModal, setShowProductImageModal] = useState(false);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [autoDetectedZoneId, setAutoDetectedZoneId] = useState<string | null>(null);
+  const hasUserManuallySelectedZoneRef = useRef<boolean>(false);
 
   const handleClose = () => {
     if (checkoutStep === 3) {
       resetCheckout();
+      hasUserManuallySelectedZoneRef.current = false;
+      setAutoDetectedZoneId(null);
     } else {
       setCheckoutDrawerOpen(false);
     }
@@ -544,6 +566,56 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     bouquetTotal + addonsTotal + deliveryFee + holidaySurchargeTotal;
   const animatedTotal = useCountUp(grandTotal, 280);
 
+  // Smart Address Auto-Detection for Delivery Zones
+  const autoDetectEnabled = Boolean(
+    isDeliveryFeeEnabled && deliveryConfig?.autoDetectZone !== false
+  );
+  const deliveryZones = deliveryConfig?.zones;
+
+  useEffect(() => {
+    if (!autoDetectEnabled || !deliveryZones || deliveryZones.length === 0) return;
+    if (!isDelivery) return;
+
+    const rawAddress = customerDetails.deliveryAddress?.trim() || "";
+
+    // Reset manual override flag if user cleared the address
+    if (!rawAddress) {
+      hasUserManuallySelectedZoneRef.current = false;
+      setAutoDetectedZoneId(null);
+      return;
+    }
+
+    if (rawAddress.length < 3) return;
+
+    // Detect zone with debounce for typing, faster response on autofill
+    const timer = setTimeout(() => {
+      const match = detectDeliveryZone(rawAddress, deliveryZones);
+      if (match) {
+        setAutoDetectedZoneId(match.zoneId);
+        if (!hasUserManuallySelectedZoneRef.current) {
+          setSelectedDeliveryZoneId(match.zoneId);
+        }
+      } else {
+        if (!hasUserManuallySelectedZoneRef.current) {
+          setAutoDetectedZoneId(null);
+        }
+      }
+    }, rawAddress.length > 15 ? 100 : 250);
+
+    return () => clearTimeout(timer);
+  }, [
+    customerDetails.deliveryAddress,
+    autoDetectEnabled,
+    deliveryZones,
+    isDelivery,
+    setSelectedDeliveryZoneId,
+  ]);
+
+  const autoDetectedZone = useMemo(() => {
+    if (!autoDetectedZoneId || !deliveryZones) return null;
+    return deliveryZones.find((z) => z.id === autoDetectedZoneId) || null;
+  }, [autoDetectedZoneId, deliveryZones]);
+
   // Reset selected time if date switched to today and current selection is expired
   useEffect(() => {
     if (isToday) {
@@ -630,6 +702,9 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
 
   const handleExactTimeChange = (timeVal: string) => {
     setExactTimeInput(timeVal);
+    if (validationError?.field === "time") {
+      setValidationError(null);
+    }
     if (timeVal) {
       setSelectedTime(`${formatTime12h(timeVal)} (Exact Delivery)`);
     } else {
@@ -661,12 +736,54 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
     ];
   }, [locale]);
 
+  const reportValidationError = (field: ValidationErrorField, message: string) => {
+    setValidationError({ field, message });
+    toast.error(message, { id: "checkout-validation" });
+
+    let elementId: string | null = null;
+    switch (field) {
+      case "deliveryZone":
+        elementId = "checkout-delivery-zone-section";
+        break;
+      case "date":
+        elementId = "checkout-date-section";
+        break;
+      case "time":
+        elementId = isExactTimeMode ? "checkout-delivery-time" : "checkout-time-section";
+        break;
+      case "name":
+        elementId = "checkout-recipient-name";
+        break;
+      case "phone":
+        elementId = "checkout-recipient-phone";
+        break;
+      case "deliveryAddress":
+        elementId = "checkout-delivery-address";
+        break;
+      default:
+        elementId = null;
+    }
+
+    if (elementId) {
+      setTimeout(() => {
+        const el = document.getElementById(elementId);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+            el.focus({ preventScroll: true });
+          }
+        }
+      }, 50);
+    }
+  };
+
   const handleProceedToPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
 
     if (isProductSoldOut) {
-      setValidationError(
+      reportValidationError(
+        "general",
         locale === "zh"
           ? "抱歉，该花礼今日已售罄，无法提交订单。请返回选购其他精美花礼。"
           : "We're sorry, this floral arrangement has sold out for today. Please choose another bouquet."
@@ -674,50 +791,50 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
       return;
     }
 
-    if (!customerDetails.name.trim()) {
-      setValidationError(t("validationName"));
+    // 1. Delivery Zone (if Doorstep Delivery)
+    if (isDelivery && isDeliveryFeeEnabled && !selectedDeliveryZoneId) {
+      reportValidationError("deliveryZone", t("validationDeliveryZone"));
       return;
     }
-    if (!customerDetails.phone.trim()) {
-      setValidationError(t("validationPhone"));
-      return;
-    }
+
+    // 2. Fulfillment Date
     if (!selectedDate) {
-      setValidationError(t("validationDate"));
+      reportValidationError("date", t("validationDate"));
       return;
     }
     if (selectedDate < todayStr) {
-      setValidationError(t("validationPastDate"));
+      reportValidationError("date", t("validationPastDate"));
       return;
     }
     if (selectedDate < minSelectableDate) {
-      setValidationError(
+      reportValidationError(
+        "date",
         isTodayPaused ? t("validationTodayPaused") : t("validationStoreClosedDate")
       );
       return;
     }
     if (isHolidaySoldOut && holidayRule) {
       const holidayName = locale === "zh" ? holidayRule.nameZh || holidayRule.name : holidayRule.name;
-      setValidationError(
+      reportValidationError(
+        "date",
         t("holidayCapacitySoldOut", { holiday: holidayName, date: selectedDate })
       );
       return;
     }
     if (selectedDateClosedInfo.isClosed) {
-      setValidationError(selectedDateClosedInfo.reason || t("validationStoreClosedDate"));
+      reportValidationError("date", selectedDateClosedInfo.reason || t("validationStoreClosedDate"));
       return;
     }
-    if (isDelivery && isDeliveryFeeEnabled && !selectedDeliveryZoneId) {
-      setValidationError(t("validationDeliveryZone"));
-      return;
-    }
+
+    // 3. Delivery / Fulfillment Time
     if (isExactTimeMode) {
       if (!exactTimeInput) {
-        setValidationError(t("validationExactTime"));
+        reportValidationError("time", t("validationExactTime"));
         return;
       }
       if (isToday && exactTimeInput < minTimeForExactInput) {
-        setValidationError(
+        reportValidationError(
+          "time",
           t("validationExactTimeAdvance", {
             hours: leadHours,
             time: formatTime12h(minTimeForExactInput),
@@ -726,7 +843,8 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
         return;
       }
       if (exactTimeInput < operatingStart || exactTimeInput > operatingEnd) {
-        setValidationError(
+        reportValidationError(
+          "time",
           t("validationExactTimeHours", {
             start: formatTime12h(operatingStart),
             end: formatTime12h(operatingEnd),
@@ -736,12 +854,26 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
       }
     } else {
       if (!selectedTime) {
-        setValidationError(t("validationTimeSlot"));
+        reportValidationError("time", t("validationTimeSlot"));
         return;
       }
     }
+
+    // 4. Contact: Name
+    if (!customerDetails.name.trim()) {
+      reportValidationError("name", t("validationName"));
+      return;
+    }
+
+    // 5. Contact: Phone
+    if (!customerDetails.phone.trim()) {
+      reportValidationError("phone", t("validationPhone"));
+      return;
+    }
+
+    // 6. Contact: Delivery Address (if Doorstep Delivery)
     if (fulfillmentMethod === "delivery" && !customerDetails.deliveryAddress.trim()) {
-      setValidationError(t("validationAddress"));
+      reportValidationError("deliveryAddress", t("validationAddress"));
       return;
     }
 
@@ -762,7 +894,8 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
               data.status.outOfStockProductIds?.includes(selectedProduct.id)
           );
           if (isLatestSoldOut) {
-            setValidationError(
+            reportValidationError(
+              "general",
               locale === "zh"
                 ? "抱歉，花艺师刚刚将该花礼标记为今日已售罄，无法提交此订单。请返回挑选其他心仪花礼。"
                 : "We're sorry, this floral arrangement was just marked sold out for today. Please choose another bouquet."
@@ -880,15 +1013,6 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
               </button>
             </div>
           </div>
-          <DrawerDescription className="text-[12px] text-stone-500 mt-0.5">
-            {checkoutStep === 1
-              ? t("drawerOrderFor", { store: store.name })
-              : checkoutStep === 2
-              ? t("drawerTngSubtitle")
-              : locale === "zh"
-              ? "花店将在 WhatsApp 中与您核对订单。"
-              : "The florist will confirm in WhatsApp."}
-          </DrawerDescription>
         </DrawerHeader>
 
         {checkoutStep === 1 ? (
@@ -1151,7 +1275,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
 
                 {/* Delivery Zone Selector for Doorstep Delivery */}
                 {fulfillmentMethod === "delivery" && isDeliveryFeeEnabled && deliveryConfig && (
-                  <div className="mt-3 space-y-1.5 pt-2.5 border-t border-stone-100">
+                  <div id="checkout-delivery-zone-section" className="mt-3 space-y-1.5 pt-2.5 border-t border-stone-100">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 text-stone-500" />
@@ -1173,32 +1297,36 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                         </span>
                       )}
                     </div>
-                    <div className="relative">
-                      <select
-                        id="checkout-delivery-zone"
-                        aria-label={t("deliveryArea")}
-                        value={selectedDeliveryZoneId || ""}
-                        onChange={(e) => setSelectedDeliveryZoneId(e.target.value)}
-                        required
-                        className="block w-full max-w-full appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all cursor-pointer font-medium"
-                      >
-                        <option value="" disabled>
-                          {t("selectDeliveryArea")}
-                        </option>
-                        {deliveryConfig.zones?.map((zone) => {
-                          const zoneName =
-                            locale === "zh" ? zone.nameZh || zone.name : zone.name;
-                          const feeDisplay = isFreeDelivery
-                            ? "FREE"
-                            : `+${currency} ${zone.fee.toFixed(2)}`;
-                          return (
-                            <option key={zone.id} value={zone.id}>
-                              {zoneName} ({feeDisplay})
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
+                    <DeliveryZoneDropdown
+                      zones={deliveryConfig.zones}
+                      selectedZoneId={selectedDeliveryZoneId}
+                      onSelectZone={(zoneId) => {
+                        hasUserManuallySelectedZoneRef.current = true;
+                        setSelectedDeliveryZoneId(zoneId);
+                        if (zoneId !== autoDetectedZoneId) {
+                          setAutoDetectedZoneId(null);
+                        }
+                        if (validationError?.field === "deliveryZone") {
+                          setValidationError(null);
+                        }
+                      }}
+                      autoDetected={Boolean(
+                        selectedDeliveryZoneId &&
+                        autoDetectedZoneId &&
+                        selectedDeliveryZoneId === autoDetectedZoneId
+                      )}
+                      hasError={validationError?.field === "deliveryZone"}
+                      isFreeDelivery={isFreeDelivery}
+                      currency={currency}
+                      locale={locale}
+                      placeholder={t("selectDeliveryArea")}
+                    />
+                    {validationError?.field === "deliveryZone" && (
+                      <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-red-600 animate-in fade-in duration-200">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                        <span>{validationError.message}</span>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1219,7 +1347,7 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                 )}
 
                 {/* Date Input */}
-                <div className="w-full min-w-0">
+                <div id="checkout-date-section" className="w-full min-w-0">
                   <div className="mb-1.5 flex items-center justify-between">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5 text-stone-500" />
@@ -1229,7 +1357,10 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                       <button
                         type="button"
                         disabled={isTodayPaused || areTodayDeliveriesClosed}
-                        onClick={() => setQuickDate(0)}
+                        onClick={() => {
+                          setQuickDate(0);
+                          if (validationError?.field === "date") setValidationError(null);
+                        }}
                         className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-all ${
                           isTodayPaused || areTodayDeliveriesClosed
                             ? "opacity-60 cursor-not-allowed bg-stone-100 text-stone-400"
@@ -1258,7 +1389,10 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                       <button
                         type="button"
                         disabled={isTomorrowBlocked || isTomorrowDateRestricted}
-                        onClick={() => setQuickDate(1)}
+                        onClick={() => {
+                          setQuickDate(1);
+                          if (validationError?.field === "date") setValidationError(null);
+                        }}
                         className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-all ${
                           isTomorrowBlocked || isTomorrowDateRestricted
                             ? "opacity-60 cursor-not-allowed bg-stone-100 text-stone-400"
@@ -1383,27 +1517,40 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                         }
                         if (val < todayStr) {
                           setSelectedDate(minSelectableDate);
-                          setValidationError(t("validationPastDate"));
+                          reportValidationError("date", t("validationPastDate"));
                           return;
                         }
                         if (val < minSelectableDate) {
                           setSelectedDate(minSelectableDate);
-                          setValidationError(
+                          reportValidationError(
+                            "date",
                             isTodayPaused ? t("validationTodayPaused") : t("validationStoreClosedDate")
                           );
                           return;
                         }
                         setSelectedDate(val);
-                        setValidationError(null);
+                        if (validationError?.field === "date") {
+                          setValidationError(null);
+                        }
                       }}
                       required
-                      className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                      className={`block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border px-3 py-2.5 text-base sm:text-xs shadow-2xs focus:outline-none transition-all ${
+                        validationError?.field === "date"
+                          ? "border-red-400 bg-white ring-2 ring-red-100 text-stone-900"
+                          : "border-stone-200 bg-stone-50/50 text-stone-900 focus:border-stone-400 focus:bg-white"
+                      }`}
                     />
                   </div>
+                  {validationError?.field === "date" && (
+                    <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-red-600 animate-in fade-in duration-200">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                      <span>{validationError.message}</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Time picker section (Exact Time vs Time Range) */}
-                <div>
+                <div id="checkout-time-section" className="scroll-mt-4">
                   <div className="mb-1.5 flex items-center justify-between">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
                       <Clock className="h-3.5 w-3.5 text-stone-500" />
@@ -1422,6 +1569,14 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                       </span>
                     )}
                   </div>
+
+                  {/* Inline Error Notice for Time if missing */}
+                  {validationError?.field === "time" && (
+                    <div className="mb-2 flex items-center gap-1.5 rounded-xl bg-red-50 border border-red-200/90 px-3 py-2 text-xs font-semibold text-red-700 animate-in fade-in duration-200">
+                      <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+                      <span>{validationError.message}</span>
+                    </div>
+                  )}
 
                   {/* If all deliveries for today are closed */}
                   {isToday && areTodayDeliveriesClosed ? (
@@ -1456,7 +1611,11 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                           value={exactTimeInput}
                           onChange={(e) => handleExactTimeChange(e.target.value)}
                           required
-                          className="block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border border-stone-200 bg-stone-50/50 px-3 py-2.5 text-base sm:text-xs text-stone-900 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
+                          className={`block w-full max-w-full min-w-0 box-border appearance-none rounded-xl border px-3 py-2.5 text-base sm:text-xs shadow-2xs focus:outline-none transition-all ${
+                            validationError?.field === "time"
+                              ? "border-red-400 bg-white ring-2 ring-red-100 text-stone-900"
+                              : "border-stone-200 bg-stone-50/50 text-stone-900 focus:border-stone-400 focus:bg-white"
+                          }`}
                         />
                       </div>
 
@@ -1504,11 +1663,15 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                   ) : (
                     /* RANGE MODE UI (1-column if <=4 slots, compact 2-column grid if >4 slots) */
                     <div
-                      className={
+                      className={`transition-all rounded-2xl ${
+                        validationError?.field === "time"
+                          ? "p-1.5 border border-red-300 ring-2 ring-red-100/80 bg-red-50/20"
+                          : ""
+                      } ${
                         configuredSlots.length > 4
                           ? "grid grid-cols-2 gap-2"
                           : "grid grid-cols-1 gap-1.5"
-                      }
+                      }`}
                     >
                       {availableTimeSlots.map((slot) => {
                         const slotString = slot.hours
@@ -1519,7 +1682,12 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                           <button
                             key={slot.id}
                             type="button"
-                            onClick={() => setSelectedTime(slotString)}
+                            onClick={() => {
+                              setSelectedTime(slotString);
+                              if (validationError?.field === "time") {
+                                setValidationError(null);
+                              }
+                            }}
                             className={`flex items-center justify-between rounded-xl border p-2.5 text-xs text-left transition-all cursor-pointer ${
                               isSelected
                                 ? "font-semibold shadow-2xs text-stone-900"
@@ -1586,68 +1754,134 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                 </label>
 
                 {/* Name */}
-                <div className="relative">
-                  <User className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
-                  <input
-                    id="checkout-recipient-name"
-                    type="text"
-                    name="name"
-                    autoComplete="name"
-                    aria-label={t("recipientNamePlaceholder")}
-                    placeholder={t("recipientNamePlaceholder")}
-                    value={customerDetails.name}
-                    onChange={(e) =>
-                      setCustomerDetails({ name: e.target.value })
-                    }
-                    required
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
-                  />
+                <div className="space-y-1">
+                  <div className="relative flex items-center">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 pointer-events-none" />
+                    <input
+                      id="checkout-recipient-name"
+                      type="text"
+                      name="name"
+                      autoComplete="name"
+                      aria-label={t("recipientNamePlaceholder")}
+                      placeholder={t("recipientNamePlaceholder")}
+                      value={customerDetails.name}
+                      onChange={(e) => {
+                        setCustomerDetails({ name: e.target.value });
+                        if (validationError?.field === "name") {
+                          setValidationError(null);
+                        }
+                      }}
+                      required
+                      className={`w-full rounded-xl border h-11 pr-3 pl-10 text-base sm:text-xs shadow-2xs focus:outline-none transition-all ${
+                        validationError?.field === "name"
+                          ? "border-red-400 bg-white ring-2 ring-red-100 text-stone-900"
+                          : "border-stone-200 bg-stone-50/50 text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:bg-white"
+                      }`}
+                    />
+                  </div>
+                  {validationError?.field === "name" && (
+                    <p className="flex items-center gap-1.5 text-xs font-semibold text-red-600 animate-in fade-in duration-200 px-1">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                      <span>{validationError.message}</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Phone */}
-                <div className="relative">
-                  <Phone className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
-                  <input
-                    id="checkout-recipient-phone"
-                    type="tel"
-                    name="tel"
-                    autoComplete="tel"
-                    aria-label={t("phonePlaceholder")}
-                    placeholder={t("phonePlaceholder")}
-                    value={customerDetails.phone}
-                    onChange={(e) =>
-                      setCustomerDetails({ phone: e.target.value })
-                    }
-                    required
-                    className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all"
-                  />
+                <div className="space-y-1">
+                  <div className="relative flex items-center">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 pointer-events-none" />
+                    <input
+                      id="checkout-recipient-phone"
+                      type="tel"
+                      name="tel"
+                      autoComplete="tel"
+                      aria-label={t("phonePlaceholder")}
+                      placeholder={t("phonePlaceholder")}
+                      value={customerDetails.phone}
+                      onChange={(e) => {
+                        setCustomerDetails({ phone: e.target.value });
+                        if (validationError?.field === "phone") {
+                          setValidationError(null);
+                        }
+                      }}
+                      required
+                      className={`w-full rounded-xl border h-11 pr-3 pl-10 text-base sm:text-xs shadow-2xs focus:outline-none transition-all ${
+                        validationError?.field === "phone"
+                          ? "border-red-400 bg-white ring-2 ring-red-100 text-stone-900"
+                          : "border-stone-200 bg-stone-50/50 text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:bg-white"
+                      }`}
+                    />
+                  </div>
+                  {validationError?.field === "phone" && (
+                    <p className="flex items-center gap-1.5 text-xs font-semibold text-red-600 animate-in fade-in duration-200 px-1">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                      <span>{validationError.message}</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Delivery Address (only when Delivery is selected) */}
                 {fulfillmentMethod === "delivery" && (
-                  <div className="relative">
-                    <MapPin className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
-                    <textarea
-                      id="checkout-delivery-address"
-                      name="street-address"
-                      autoComplete="street-address"
-                      aria-label={t("addressPlaceholder")}
-                      placeholder={t("addressPlaceholder")}
-                      rows={2}
-                      value={customerDetails.deliveryAddress}
-                      onChange={(e) =>
-                        setCustomerDetails({ deliveryAddress: e.target.value })
-                      }
-                      required
-                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-3 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
-                    />
+                  <div className="space-y-1.5">
+                    <div className="relative">
+                      <MapPin className="absolute left-3.5 top-3.5 h-4 w-4 text-stone-400 pointer-events-none" />
+                      <textarea
+                        id="checkout-delivery-address"
+                        name="street-address"
+                        autoComplete="street-address"
+                        aria-label={t("addressPlaceholder")}
+                        placeholder={t("addressPlaceholder")}
+                        rows={2}
+                        value={customerDetails.deliveryAddress}
+                        onChange={(e) => {
+                          setCustomerDetails({ deliveryAddress: e.target.value });
+                          if (validationError?.field === "deliveryAddress") {
+                            setValidationError(null);
+                          }
+                        }}
+                        required
+                        className={`w-full rounded-xl border pt-3 pb-2.5 pr-3 pl-10 text-base sm:text-xs leading-5 shadow-2xs focus:outline-none transition-all resize-none ${
+                          validationError?.field === "deliveryAddress"
+                            ? "border-red-400 bg-white ring-2 ring-red-100 text-stone-900"
+                            : "border-stone-200 bg-stone-50/50 text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:bg-white"
+                        }`}
+                      />
+                    </div>
+                    {validationError?.field === "deliveryAddress" && (
+                      <p className="flex items-center gap-1.5 text-xs font-semibold text-red-600 animate-in fade-in duration-200 px-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                        <span>{validationError.message}</span>
+                      </p>
+                    )}
+                    {/* Auto-detected Zone Confirmation Hint */}
+                    {autoDetectedZone && isDeliveryFeeEnabled && selectedDeliveryZoneId === autoDetectedZone.id && (
+                      <div className="flex items-center justify-between text-[11px] text-stone-600 px-1 pt-0.5 animate-in fade-in duration-200">
+                        <span className="flex items-center gap-1.5 font-medium text-stone-700 truncate">
+                          <Sparkles className="h-3 w-3 text-stone-500 shrink-0" />
+                          <span className="truncate">
+                            {t("autoDetected")}:{" "}
+                            <strong className="text-stone-900 font-semibold">
+                              {locale === "zh"
+                                ? autoDetectedZone.nameZh || autoDetectedZone.name
+                                : autoDetectedZone.name}
+                            </strong>
+                          </span>
+                        </span>
+                        <span className="text-[10px] font-semibold text-stone-500 shrink-0 ml-2">
+                          {isFreeDelivery
+                            ? t("freeDelivery")
+                            : `+${currency} ${autoDetectedZone.fee.toFixed(2)}`}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Complimentary Card Message (Nullable / Optional) */}
                 <div className="space-y-1.5">
                   <div className="relative">
-                    <Heart className="absolute top-2.5 left-3 h-4 w-4 text-stone-400 pointer-events-none" />
+                    <Heart className="absolute left-3.5 top-3.5 h-4 w-4 text-stone-400 pointer-events-none" />
                     <textarea
                       id="checkout-card-message"
                       aria-label={t("cardMessagePlaceholder")}
@@ -1657,13 +1891,13 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                       onChange={(e) =>
                         setCustomerDetails({ cardMessage: e.target.value })
                       }
-                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 py-2.5 pr-8 pl-9 text-base sm:text-xs text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
+                      className="w-full rounded-xl border border-stone-200 bg-stone-50/50 pt-3 pb-2.5 pr-8 pl-10 text-base sm:text-xs leading-5 text-stone-900 placeholder:text-stone-400 shadow-2xs focus:border-stone-400 focus:bg-white focus:outline-none transition-all resize-none"
                     />
                     {customerDetails.cardMessage && (
                       <button
                         type="button"
                         onClick={() => setCustomerDetails({ cardMessage: "" })}
-                        className="absolute top-2.5 right-2.5 rounded-full p-0.5 text-stone-400 hover:bg-stone-200 hover:text-stone-600 transition-colors cursor-pointer"
+                        className="absolute top-3.5 right-2.5 rounded-full p-0.5 text-stone-400 hover:bg-stone-200 hover:text-stone-600 transition-colors cursor-pointer"
                         title={locale === "zh" ? "清空留言" : "Clear message"}
                         aria-label="Clear card message"
                       >
@@ -1718,9 +1952,10 @@ export const CheckoutDrawer: React.FC<CheckoutDrawerProps> = ({
                 <div
                   role="alert"
                   aria-live="polite"
-                  className="rounded-xl bg-red-50 p-3 text-xs font-medium text-red-600 border border-red-200/80 animate-in fade-in duration-200"
+                  className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700 border border-red-200/90 animate-in fade-in duration-200 flex items-center gap-2"
                 >
-                  {validationError}
+                  <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+                  <span>{validationError.message}</span>
                 </div>
               )}
 

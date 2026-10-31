@@ -118,7 +118,7 @@ export const translations = {
     addressPlaceholder:
       "Delivery Address (Unit/House No, Building, Street, Postcode, City) *",
     cardMessagePlaceholder:
-      "Complimentary Greeting Card Message (e.g. 'Happy Birthday Dear! Wishing you joy ✨')",
+      "Card Message (e.g. 'Happy Birthday Dear! Wishing you joy ✨')",
     proceedToPayment: "Proceed to Payment",
     orderConsentNotice: "By ordering, you acknowledge our",
     substitutionStorePolicy: "Substitution & Store Policy",
@@ -139,12 +139,15 @@ export const translations = {
       "Please choose a delivery time within operating hours ({start} – {end}).",
     validationTimeSlot: "Please choose a preferred delivery time slot.",
     validationAddress: "Please enter your complete delivery address.",
-    validationDeliveryZone: "Please select your delivery area / zone.",
+    validationDeliveryZone: "Please select your delivery area.",
     validationStoreClosedDate: "The store is closed on the selected date. Please pick an open date.",
 
     // Delivery Area & Add-ons
-    deliveryArea: "Delivery Area / Zone",
-    selectDeliveryArea: "Select delivery area / zone *",
+    deliveryArea: "Delivery Area",
+    selectDeliveryArea: "Select delivery area*",
+    autoDetected: "Auto-detected",
+    autoDetectedFromAddress: "Auto-detected from address",
+    autoDetectedZoneNotice: "Delivery zone auto-matched from address",
     deliveryFee: "Delivery Fee",
     freeDelivery: "FREE Delivery",
     freeDeliveryThresholdNote: "Free delivery on orders {threshold} and above!",
@@ -392,6 +395,9 @@ export const translations = {
     // Delivery Area & Add-ons
     deliveryArea: "配送区域 / 送花范围",
     selectDeliveryArea: "请选择配送区域 *",
+    autoDetected: "已自动识别",
+    autoDetectedFromAddress: "已根据地址自动识别",
+    autoDetectedZoneNotice: "已根据送花地址自动匹配配送区域",
     deliveryFee: "配送运费",
     freeDelivery: "免费专人送花",
     freeDeliveryThresholdNote: "消费满 {threshold} 享全单免运费！",

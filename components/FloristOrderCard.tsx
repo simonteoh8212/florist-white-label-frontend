@@ -243,9 +243,6 @@ export function FloristOrderCard({
         <div className="oc-head">
           <div className="oc-when-inline">
             <span className="oc-day">{dayLabel}</span>
-            <span className="oc-dot-sep" aria-hidden="true">
-              &middot;
-            </span>
             <span className="oc-slot">{compactSlot}</span>
             {isRush && (
               <span className="oc-tag oc-tag-strong">
@@ -431,17 +428,19 @@ export function FloristOrderCard({
                 </div>
               )}
 
-              <div className="oc-row oc-row-total">
-                <span>Total</span>
-                <span className="oc-num">{rm(order.totalAmount)}</span>
-              </div>
-
               <div className="oc-row">
                 <span>Payment</span>
                 <span>
                   {isPaid ? "Paid" : "Unpaid"} &middot; {payMethod}
                 </span>
               </div>
+
+              <div className="oc-row oc-row-total">
+                <span>Total</span>
+                <span className="oc-num">{rm(order.totalAmount)}</span>
+              </div>
+
+              
             </div>
 
             {/* Footer Meta & Quiet Secondary Management Actions */}

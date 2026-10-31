@@ -2,7 +2,7 @@
 
 import React from "react";
 import { SuccessCheck } from "@/components/SuccessCheck";
-import { PetalBurst } from "@/components/PetalBurst";
+import { CelebrateAnimation } from "@/components/CelebrateAnimation";
 
 export function OrderSuccess({
   message,
@@ -15,8 +15,9 @@ export function OrderSuccess({
 }) {
   return (
     <div className="order-success-screen">
-      <SuccessCheck />
-      <PetalBurst />
+      <SuccessCheck>
+        <CelebrateAnimation loop pauseMs={2000} />
+      </SuccessCheck>
       <p className="order-success-note">
         Keep your payment receipt ready to send in the chat.
       </p>
